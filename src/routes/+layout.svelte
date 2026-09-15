@@ -5,7 +5,7 @@
 	import { page } from '$app/state';
 
 	let { children } = $props();
-	let publicRoute = $derived(['/login', '/register'].includes(page.url.pathname));
+	let publicRoute = $derived(page.route.id === '/login' || page.route.id === '/register');
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /><title>NoteDesk</title><meta name="description" content="Capture and organize notes from your desk or Instagram inbox." /></svelte:head>

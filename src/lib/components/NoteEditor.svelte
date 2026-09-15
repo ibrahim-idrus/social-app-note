@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { saveNote, type Note } from '$lib/app-state.svelte';
 	import { renderMarkdown } from '$lib/app-utils';
 	import { Button } from '$lib/components/ui/button';
@@ -25,7 +26,7 @@
 	}
 	function submit() {
 		error = !title.trim() ? 'Add a title before saving.' : !content.trim() ? 'Add some note content before saving.' : '';
-		if (!error) { saveNote({ id: note?.id, title: title.trim(), content: content.trim() }); goto(note ? `/notes/${note.id}` : '/notes'); }
+		if (!error) { saveNote({ id: note?.id, title: title.trim(), content: content.trim() }); goto(note ? resolve('/notes/[id]', { id: note.id }) : resolve('/notes')); }
 	}
 </script>
 

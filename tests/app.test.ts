@@ -27,3 +27,15 @@ test('editor initializes the bound textarea ref to the child fallback value', as
 	assert.match(source, /let area = \$state<HTMLTextAreaElement \| null>\(null\)/);
 	assert.match(source, /bind:ref=\{area\}/);
 });
+
+test('internal navigation uses SvelteKit base-path resolution', async () => {
+	const { readFile } = await import('node:fs/promises');
+	const { glob } = await import('node:fs/promises');
+	const sources = await Array.fromAsync(glob('src/**/*.svelte'), (file) => readFile(file, 'utf8'));
+	const source = sources.join('\n');
+	assert.doesNotMatch(source, /href=["'`]\/|goto\(["'`]\//);
+	assert.match(source, /from '\$app\/paths'/);
+	const config = await readFile('svelte.config.js', 'utf8');
+	assert.match(config, /fallback: 'index\.html'/);
+	assert.match(config, /base: process\.env\.BASE_PATH \?\? ''/);
+});

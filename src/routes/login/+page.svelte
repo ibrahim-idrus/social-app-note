@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Input } from '$lib/components/ui/input';
@@ -14,14 +15,14 @@
 	function submit(event: SubmitEvent) {
 		event.preventDefault();
 		error = !/^\S+@\S+\.\S+$/.test(email) ? 'Enter a valid email address.' : password.length < 6 ? 'Password must be at least 6 characters.' : '';
-		if (!error) goto('/dashboard');
+		if (!error) goto(resolve('/dashboard'));
 	}
 </script>
 
 <svelte:head><title>Sign in · NoteDesk</title></svelte:head>
 <div class="auth-page">
 	<section class="auth-side">
-		<a class="brand" href="/login"><span class="brand-mark"><BookOpenText size={18} /></span>NoteDesk</a>
+		<a class="brand" href={resolve('/login')}><span class="brand-mark"><BookOpenText size={18} /></span>NoteDesk</a>
 		<div class="auth-quote"><p>Keep the useful things you find, without breaking your flow.</p><small>Manual notes and a dedicated Instagram inbox, in one quiet workspace.</small></div>
 		<small>UI prototype · Local data only</small>
 	</section>
@@ -34,7 +35,7 @@
 				<label class="check-line"><Checkbox bind:checked={remember} />Remember me on this device</label>
 				<Button type="submit" size="lg">Sign in</Button>
 			</form>
-			<p class="auth-footer">New to NoteDesk? <a href="/register">Create an account</a></p>
+			<p class="auth-footer">New to NoteDesk? <a href={resolve('/register')}>Create an account</a></p>
 		</div>
 	</main>
 </div>
