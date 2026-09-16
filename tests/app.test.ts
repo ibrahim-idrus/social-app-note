@@ -31,6 +31,18 @@ test('mutations send JSON and the CSRF cookie to the same-origin API', async () 
 	assert.deepEqual(await request?.json(), { title: 'New', content_markdown: 'Body' });
 });
 
+test('logout is sent without a CSRF dependency so a stale client token cannot keep the session alive', async () => {
+	let request: Request | undefined;
+	const api = createApiClient(async (input, init) => {
+		request = new Request(input, init);
+		return new Response(null, { status: 204 });
+	}, () => 'csrf_token=stale');
+
+	await api.logout();
+	assert.equal(request?.method, 'POST');
+	assert.equal(request?.headers.get('x-csrf-token'), null);
+});
+
 test('API errors retain status and translate backend error codes', async () => {
 	const api = createApiClient(async () => Response.json({ error: 'identity_unavailable' }, { status: 409 }));
 	await assert.rejects(api.createSocialIdentity('instagram', 'alice'), (error) => {
@@ -66,6 +78,14 @@ test('internal navigation uses SvelteKit base-path resolution', async () => {
 	const config = await readFile('svelte.config.js', 'utf8');
 	assert.match(config, /fallback: 'index\.html'/);
 	assert.match(config, /base: process\.env\.BASE_PATH \?\? ''/);
+});
+
+test('social capture uses an add-platform flow and hides occupied platforms', async () => {
+	const source = await (await import('node:fs/promises')).readFile('src/routes/settings/+page.svelte', 'utf8');
+	assert.match(source, />Add platform: \{platform\.name\}</);
+	assert.match(source, /availablePlatforms/);
+	assert.match(source, /identities\.some\(\(identity\) => identity\.platform === platform\.id\)/);
+	assert.doesNotMatch(source, /\(await api\.identities\(\)\)\[0\]/);
 });
 
 test('frontend contains no seeded, local-only, or simulated product state', async () => {

@@ -119,11 +119,7 @@ func TestRegistrationSessionProfileAndLogout(t *testing.T) {
 		t.Fatalf("profile = %d %s", profile.Code, profile.Body.String())
 	}
 
-	withoutCSRF := c.request(t, http.MethodPost, "/api/auth/logout", nil, false)
-	if withoutCSRF.Code != http.StatusForbidden {
-		t.Fatalf("logout without CSRF = %d", withoutCSRF.Code)
-	}
-	logout := c.request(t, http.MethodPost, "/api/auth/logout", nil, true)
+	logout := c.request(t, http.MethodPost, "/api/auth/logout", nil, false)
 	if logout.Code != http.StatusNoContent || len(logout.Result().Cookies()) != 2 {
 		t.Fatalf("logout = %d, cookies %#v", logout.Code, logout.Result().Cookies())
 	}

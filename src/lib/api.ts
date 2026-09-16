@@ -60,7 +60,7 @@ export function createApiClient(fetcher: Fetch = fetch, cookies = () => typeof d
 	async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 		const headers = new Headers(init.headers);
 		if (init.body) headers.set('Content-Type', 'application/json');
-		if (init.method && init.method !== 'GET') headers.set('X-CSRF-Token', cookieValue(cookies(), 'csrf_token'));
+		if (init.method && init.method !== 'GET' && path !== '/api/auth/logout') headers.set('X-CSRF-Token', cookieValue(cookies(), 'csrf_token'));
 		const origin = typeof location === 'undefined' ? 'http://localhost' : location.origin;
 		const response = await fetcher(new URL(path, origin), { ...init, headers, credentials: 'same-origin' });
 		if (!response.ok) {

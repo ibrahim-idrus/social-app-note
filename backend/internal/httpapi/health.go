@@ -29,7 +29,7 @@ func Handler(db *sql.DB, options ...Options) http.Handler {
 	})
 	mux.HandleFunc("POST /api/auth/register", api.register)
 	mux.HandleFunc("POST /api/auth/login", api.login)
-	mux.HandleFunc("POST /api/auth/logout", api.authenticated(api.logout, true))
+	mux.HandleFunc("POST /api/auth/logout", api.authenticated(api.logout, false))
 	mux.HandleFunc("GET /api/profile", api.authenticated(api.profile, false))
 	mux.HandleFunc("GET /api/social-platforms", api.authenticated(api.socialPlatforms, false))
 	mux.HandleFunc("GET /api/social-identities", api.authenticated(api.listSocialIdentities, false))
