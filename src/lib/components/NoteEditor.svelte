@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { saveNote, type Note } from '$lib/app-state.svelte';
+	import { api, type Note } from '$lib/api';
 	import { renderMarkdown } from '$lib/app-utils';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -15,8 +15,9 @@
 	let error = $state('');
 	let area = $state<HTMLTextAreaElement | null>(null);
 	let initialized = $state(false);
+	let saving = $state(false);
 	$effect.pre(() => {
-		if (!initialized) { title = note?.title ?? ''; content = note?.content ?? ''; initialized = true; }
+		if (!initialized) { title = note?.title ?? ''; content = note?.content_markdown ?? ''; initialized = true; }
 	});
 	function wrap(before: string, after = before, placeholder = 'text') {
 		if (!area) return;
@@ -24,9 +25,15 @@
 		content = `${content.slice(0, start)}${before}${selected}${after}${content.slice(end)}`;
 		requestAnimationFrame(() => { target.focus(); target.setSelectionRange(start + before.length, start + before.length + selected.length); });
 	}
-	function submit() {
+	async function submit() {
 		error = !title.trim() ? 'Add a title before saving.' : !content.trim() ? 'Add some note content before saving.' : '';
-		if (!error) { saveNote({ id: note?.id, title: title.trim(), content: content.trim() }); goto(note ? resolve('/notes/[id]', { id: note.id }) : resolve('/notes')); }
+		if (error) return;
+		saving = true;
+		try {
+			const saved = note ? await api.updateNote(note.id, { title: title.trim(), content: content.trim() }) : await api.createNote({ title: title.trim(), content: content.trim() });
+			await goto(resolve('/notes/[id]', { id: String(saved.id) }));
+		} catch (cause) { error = cause instanceof Error ? cause.message : 'The note could not be saved.'; }
+		finally { saving = false; }
 	}
 </script>
 
@@ -37,5 +44,5 @@
 		<section class="editor-pane"><div class="editor-label"><span>Preview</span><Eye size={15} /></div><div class="preview prose">{#if content}<div>{@html renderMarkdown(content)}</div>{:else}<p class="subtle">Your formatted note will appear here.</p>{/if}</div></section>
 	</div>
 	<p class="field-help">Raw HTML is displayed as text. Links are limited to HTTP and HTTPS.</p>
-	<div class="form-actions"><Button variant="outline" onclick={() => history.back()}>Cancel</Button><Button onclick={submit}>{note ? 'Save changes' : 'Save note'}</Button></div>
+	<div class="form-actions"><Button variant="outline" onclick={() => history.back()}>Cancel</Button><Button onclick={submit} disabled={saving}>{saving ? 'Saving…' : note ? 'Save changes' : 'Save note'}</Button></div>
 </div>

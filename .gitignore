@@ -18,6 +18,11 @@ Thumbs.db
 !.env.example
 !.env.test
 
+# Local SQLite runtime files
+/sqlite.db
+/sqlite.db-shm
+/sqlite.db-wal
+
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*

@@ -1,16 +1,44 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { filterNotes, renderMarkdown } from '../src/lib/app-utils.ts';
+import { ApiError, createApiClient } from '../src/lib/api.ts';
+import { renderMarkdown } from '../src/lib/app-utils.ts';
 
-const notes = [
-	{ id: '1', title: 'Release checklist', content: 'Confirm the launch window', source: 'manual', createdAt: '2026-09-12', updatedAt: '2026-09-14' },
-	{ id: '2', title: 'Camera notes', content: 'Try the 35mm framing', source: 'instagram', createdAt: '2026-09-13', updatedAt: '2026-09-13' }
-] as const;
+test('notes search, filtering, sorting, and pagination are sent to the backend', async () => {
+	let request: Request | undefined;
+	const api = createApiClient(async (input, init) => {
+		request = new Request(input, init);
+		return Response.json({ notes: [], total: 0, page: 3, page_size: 5 });
+	});
 
-test('filters by search and source, then sorts newest first', () => {
-	assert.deepEqual(filterNotes(notes, 'camera', 'instagram', 'updated-desc').map((note) => note.id), ['2']);
-	assert.deepEqual(filterNotes(notes, '', 'all', 'title-asc').map((note) => note.id), ['2', '1']);
+	await api.listNotes({ query: 'camera kit', source: 'instagram', sort: 'title', order: 'asc', page: 3, pageSize: 5 });
+	const url = new URL(request!.url);
+	assert.deepEqual(Object.fromEntries(url.searchParams), { sort: 'title', order: 'asc', page: '3', page_size: '5', q: 'camera kit', source: 'instagram' });
+	assert.equal(request?.credentials, 'same-origin');
+});
+
+test('mutations send JSON and the CSRF cookie to the same-origin API', async () => {
+	let request: Request | undefined;
+	const api = createApiClient(async (input, init) => {
+		request = new Request(input, init);
+		return Response.json({ id: 7, title: 'New', content_markdown: 'Body', source: 'manual', created_at: '', updated_at: '', social_identity_id: null, external_message_id: null }, { status: 201 });
+	}, () => 'other=x; csrf_token=token%20value');
+
+	await api.createNote({ title: 'New', content: 'Body' });
+	assert.equal(request?.url, 'http://localhost/api/notes');
+	assert.equal(request?.method, 'POST');
+	assert.equal(request?.headers.get('x-csrf-token'), 'token value');
+	assert.deepEqual(await request?.json(), { title: 'New', content_markdown: 'Body' });
+});
+
+test('API errors retain status and translate backend error codes', async () => {
+	const api = createApiClient(async () => Response.json({ error: 'identity_unavailable' }, { status: 409 }));
+	await assert.rejects(api.createSocialIdentity('instagram', 'alice'), (error) => {
+		assert.ok(error instanceof ApiError);
+		assert.equal(error.status, 409);
+		assert.equal(error.message, 'This Instagram identity is unavailable.');
+		return true;
+	});
 });
 
 test('renders basic markdown without allowing raw HTML or unsafe links', () => {
@@ -38,4 +66,12 @@ test('internal navigation uses SvelteKit base-path resolution', async () => {
 	const config = await readFile('svelte.config.js', 'utf8');
 	assert.match(config, /fallback: 'index\.html'/);
 	assert.match(config, /base: process\.env\.BASE_PATH \?\? ''/);
+});
+
+test('frontend contains no seeded, local-only, or simulated product state', async () => {
+	const { readFile } = await import('node:fs/promises');
+	const { glob } = await import('node:fs/promises');
+	const sources = await Array.fromAsync(glob('src/**/*.{svelte,ts}'), (file) => readFile(file, 'utf8'));
+	const source = sources.join('\n');
+	assert.doesNotMatch(source, /localStorage|seedNotes|pravatar|Maya Chen|maya@example\.com|demo details|prototype stays|Simulate first DM|Demonstration state|setTimeout/);
 });
