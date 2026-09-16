@@ -61,9 +61,8 @@ export function createApiClient(fetcher: Fetch = fetch, cookies = () => typeof d
 		const headers = new Headers(init.headers);
 		if (init.body) headers.set('Content-Type', 'application/json');
 		if (init.method && init.method !== 'GET' && path !== '/api/auth/logout') headers.set('X-CSRF-Token', cookieValue(cookies(), 'csrf_token'));
-		const origin = typeof location === 'undefined' ? 'http://localhost' : location.origin;
-		const base = typeof import.meta.env === 'undefined' ? '' : import.meta.env.BASE_URL.replace(/\/$/, '');
-		const response = await fetcher(new URL(`${base}${path}`, origin), { ...init, headers, credentials: 'same-origin' });
+		const base = typeof document === 'undefined' ? 'http://localhost/' : document.baseURI;
+		const response = await fetcher(new URL(`.${path}`, base), { ...init, headers, credentials: 'same-origin' });
 		if (!response.ok) {
 			const body = await response.json().catch(() => ({})) as { error?: string };
 			throw new ApiError(response.status, body.error ?? 'unknown_error');
