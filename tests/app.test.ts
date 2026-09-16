@@ -78,6 +78,9 @@ test('internal navigation uses SvelteKit base-path resolution', async () => {
 	const config = await readFile('svelte.config.js', 'utf8');
 	assert.match(config, /fallback: 'index\.html'/);
 	assert.match(config, /base: process\.env\.BASE_PATH \?\? ''/);
+	const apiSource = await readFile('src/lib/api.ts', 'utf8');
+	assert.match(apiSource, /import\.meta\.env\.BASE_URL/);
+	assert.match(apiSource, /new URL\(`\$\{base\}\$\{path\}`/);
 });
 
 test('social capture uses an add-platform flow and hides occupied platforms', async () => {
