@@ -60,11 +60,11 @@ func TestSocialPlatformsExposeInstagramPrototypeCapability(t *testing.T) {
 	if err := json.Unmarshal(res.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Platforms) != 1 || result.Platforms[0].ID != "instagram" || !result.Platforms[0].Available || result.Platforms[0].SearchEnabled {
+	if len(result.Platforms) != 1 || result.Platforms[0].ID != "instagram" || !result.Platforms[0].Available || !result.Platforms[0].SearchEnabled {
 		t.Fatalf("platforms = %#v", result.Platforms)
 	}
-	if got := c.request(t, http.MethodGet, "/api/social-identities/search?platform=instagram&username=alice", nil, false).Code; got != http.StatusMethodNotAllowed {
-		t.Fatalf("search endpoint exists: status = %d", got)
+	if got := c.request(t, http.MethodGet, "/api/social-identities/search?platform=instagram&username=alice", nil, false).Code; got != http.StatusServiceUnavailable {
+		t.Fatalf("search without token = %d", got)
 	}
 	if got := c.request(t, http.MethodPut, "/api/social-identities/1", map[string]string{}, true).Code; got != http.StatusMethodNotAllowed {
 		t.Fatalf("identity PUT exists: status = %d", got)

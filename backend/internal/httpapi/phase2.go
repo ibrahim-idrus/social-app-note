@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -16,8 +18,45 @@ import (
 
 func (api *API) socialPlatforms(w http.ResponseWriter, _ *http.Request, _ authentication) {
 	writeJSON(w, http.StatusOK, map[string]any{"platforms": []map[string]any{{
-		"id": "instagram", "name": "Instagram", "available": true, "search_enabled": false,
+		"id": "instagram", "name": "Instagram", "available": true, "search_enabled": true,
 	}}})
+}
+
+func (api *API) searchSocialIdentities(w http.ResponseWriter, r *http.Request, _ authentication) {
+	username, ok := normalizeInstagramUsername(r.URL.Query().Get("username"))
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid_query")
+		return
+	}
+	if api.instagramAccountID == "" || api.instagramAccessToken == "" {
+		writeError(w, http.StatusServiceUnavailable, "instagram_search_unavailable")
+		return
+	}
+	u := fmt.Sprintf("https://graph.facebook.com/v23.0/%s?fields=business_discovery.username(%s){id,username,name,profile_picture_url}&access_token=%s", api.instagramAccountID, username, api.instagramAccessToken)
+	req, _ := http.NewRequestWithContext(r.Context(), http.MethodGet, u, nil)
+	res, err := api.httpClient.Do(req)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "instagram_search_failed")
+		return
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		writeError(w, http.StatusBadGateway, "instagram_search_failed")
+		return
+	}
+	var out struct {
+		BusinessDiscovery *struct {
+			ID                string `json:"id"`
+			Username          string `json:"username"`
+			Name              string `json:"name"`
+			ProfilePictureURL string `json:"profile_picture_url"`
+		} `json:"business_discovery"`
+	}
+	if json.NewDecoder(res.Body).Decode(&out) != nil || out.BusinessDiscovery == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"accounts": []any{}})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"accounts": []any{out.BusinessDiscovery}})
 }
 
 func (api *API) listSocialIdentities(w http.ResponseWriter, r *http.Request, auth authentication) {

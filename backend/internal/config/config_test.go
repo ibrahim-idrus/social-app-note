@@ -33,7 +33,8 @@ func TestLoad(t *testing.T) {
 			contents: "HTTP_ADDR=127.0.0.1:8080\n" +
 				"DATABASE_PATH=sqlite.db\n" +
 				"SESSION_COOKIE_SECURE=false\n" +
-				"INSTAGRAM_ENABLED=false\n",
+				"INSTAGRAM_ENABLED=false\n" +
+				"INSTAGRAM_APP_ID=app\nINSTAGRAM_APP_SECRET=secret\nINSTAGRAM_DEDICATED_ACCOUNT_ID=17841426326903892\nINSTAGRAM_DEDICATED_USERNAME=akun_testing911\nINSTAGRAM_WEBHOOK_VERIFY_TOKEN=verify\nINSTAGRAM_ACCESS_TOKEN=token\n",
 		},
 		{
 			name: "HTTPS cookies",
@@ -85,6 +86,9 @@ func TestLoad(t *testing.T) {
 			}
 			if got.HTTPAddr != "127.0.0.1:8080" || got.DatabasePath != "sqlite.db" || got.SessionCookieSecure != tt.wantSecure || got.InstagramEnabled {
 				t.Fatalf("Load() = %#v", got)
+			}
+			if tt.name == "valid" && (got.InstagramDedicatedAccountID != "17841426326903892" || got.InstagramDedicatedUsername != "akun_testing911" || got.InstagramAccessToken != "token") {
+				t.Fatalf("Instagram config = %#v", got)
 			}
 		})
 	}

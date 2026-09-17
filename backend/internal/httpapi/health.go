@@ -5,10 +5,14 @@ import (
 	"database/sql"
 	"net/http"
 	"time"
+
+	"social-notes/backend/internal/store"
 )
 
 type Options struct {
-	SecureCookies bool
+	SecureCookies                                               bool
+	InstagramAccountID, InstagramUsername, InstagramAccessToken string
+	HTTPClient                                                  *http.Client
 }
 
 func Handler(db *sql.DB, options ...Options) http.Handler {
@@ -16,7 +20,12 @@ func Handler(db *sql.DB, options ...Options) http.Handler {
 	if len(options) > 0 {
 		option = options[0]
 	}
-	api := &API{db: db, secureCookies: option.SecureCookies, limiter: newLoginLimiter()}
+	client := option.HTTPClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+	api := &API{db: db, secureCookies: option.SecureCookies, limiter: newLoginLimiter(), instagramAccountID: option.InstagramAccountID, instagramAccessToken: option.InstagramAccessToken, httpClient: client}
+	_ = store.ConfigureInstagramIntegration(context.Background(), db, option.InstagramAccountID, option.InstagramUsername, option.InstagramAccessToken)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
@@ -33,6 +42,7 @@ func Handler(db *sql.DB, options ...Options) http.Handler {
 	mux.HandleFunc("GET /api/profile", api.authenticated(api.profile, false))
 	mux.HandleFunc("GET /api/social-platforms", api.authenticated(api.socialPlatforms, false))
 	mux.HandleFunc("GET /api/social-identities", api.authenticated(api.listSocialIdentities, false))
+	mux.HandleFunc("GET /api/social-identities/search", api.authenticated(api.searchSocialIdentities, false))
 	mux.HandleFunc("POST /api/social-identities", api.authenticated(api.createSocialIdentity, true))
 	mux.HandleFunc("POST /api/social-identities/{id}/verification-code", api.authenticated(api.regenerateSocialIdentityCode, true))
 	mux.HandleFunc("DELETE /api/social-identities/{id}", api.authenticated(api.deleteSocialIdentity, true))

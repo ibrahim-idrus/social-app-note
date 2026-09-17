@@ -10,10 +10,13 @@ import (
 )
 
 type Config struct {
-	HTTPAddr            string
-	DatabasePath        string
-	SessionCookieSecure bool
-	InstagramEnabled    bool
+	HTTPAddr                                                string
+	DatabasePath                                            string
+	SessionCookieSecure                                     bool
+	InstagramEnabled                                        bool
+	InstagramAppID, InstagramAppSecret                      string
+	InstagramDedicatedAccountID, InstagramDedicatedUsername string
+	InstagramWebhookVerifyToken, InstagramAccessToken       string
 }
 
 var supported = map[string]bool{
@@ -21,6 +24,9 @@ var supported = map[string]bool{
 	"DATABASE_PATH":         true,
 	"SESSION_COOKIE_SECURE": true,
 	"INSTAGRAM_ENABLED":     true,
+	"INSTAGRAM_APP_ID":      true, "INSTAGRAM_APP_SECRET": true,
+	"INSTAGRAM_DEDICATED_ACCOUNT_ID": true, "INSTAGRAM_DEDICATED_USERNAME": true,
+	"INSTAGRAM_WEBHOOK_VERIFY_TOKEN": true, "INSTAGRAM_ACCESS_TOKEN": true,
 }
 
 func Load(path string) (Config, error) {
@@ -94,5 +100,8 @@ func Load(path string) (Config, error) {
 		DatabasePath:        values["DATABASE_PATH"],
 		SessionCookieSecure: secureCookies,
 		InstagramEnabled:    false,
+		InstagramAppID:      values["INSTAGRAM_APP_ID"], InstagramAppSecret: values["INSTAGRAM_APP_SECRET"],
+		InstagramDedicatedAccountID: values["INSTAGRAM_DEDICATED_ACCOUNT_ID"], InstagramDedicatedUsername: values["INSTAGRAM_DEDICATED_USERNAME"],
+		InstagramWebhookVerifyToken: values["INSTAGRAM_WEBHOOK_VERIFY_TOKEN"], InstagramAccessToken: values["INSTAGRAM_ACCESS_TOKEN"],
 	}, nil
 }

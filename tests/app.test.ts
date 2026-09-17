@@ -122,6 +122,8 @@ test('settings explains the dedicated Instagram inbox and keeps pending reload g
 	assert.match(source, /10 minutes/i);
 	assert.match(source, /Regenerate code/i);
 	assert.match(source, /pending/i);
+	assert.doesNotMatch(source, /notedesk_inbox/);
+	assert.match(source, /searchSocialIdentities/);
 });
 
 test('frontend contains no seeded, local-only, or simulated product state', async () => {

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { api, type InstagramRegistration, type SocialIdentity, type SocialPlatform } from '$lib/api';
+	import { api, type InstagramRegistration, type SocialAccountMatch, type SocialIdentity, type SocialPlatform } from '$lib/api';
 	import { appState } from '$lib/app-state.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -13,6 +13,7 @@
 	let error = $state('');
 	let loading = $state(true);
 	let registration = $state<InstagramRegistration | null>(null);
+	let matches = $state<SocialAccountMatch[]>([]);
 	let availablePlatforms = $derived(platforms.filter((platform) => !identities.some((identity) => identity.platform === platform.id)));
 
 	async function load() {
@@ -31,6 +32,11 @@
 			username = '';
 			selectedPlatform = null;
 		} catch (cause) { error = cause instanceof Error ? cause.message : 'Identity could not be saved.'; }
+	}
+	async function search() {
+		error = '';
+		try { matches = await api.searchSocialIdentities(username); }
+		catch (cause) { matches = []; error = cause instanceof Error ? cause.message : 'Instagram search failed.'; }
 	}
 	async function regenerate(identity: SocialIdentity) {
 		error = '';
@@ -66,7 +72,7 @@
 						{#if identity.status === 'pending'}
 							<div class="notice verification-instructions">
 								<div>
-									<p><strong>DM this code to @{(registration?.id === identity.id ? registration.instagram_account : identity.instagram_account)?.username ?? 'notedesk_inbox'}</strong></p>
+									<p><strong>DM this code to @{(registration?.id === identity.id ? registration.instagram_account : identity.instagram_account)?.username}</strong></p>
 									{#if registration?.id === identity.id}<code>{registration.verification_code}</code>{:else}<p>Your code is hidden after reload.</p>{/if}
 									<p>The code expires after 10 minutes. Regenerate it if needed.</p>
 								</div>
@@ -78,9 +84,16 @@
 					{#if selectedPlatform}
 						<form class="toolbar" onsubmit={(event) => { event.preventDefault(); add(); }}>
 							<Input aria-label={`${selectedPlatform.name} username`} placeholder={`${selectedPlatform.name} username`} bind:value={username} />
-							<Button type="submit" disabled={!username.trim()}>Add account</Button>
+							<Button type="button" variant="outline" disabled={!username.trim()} onclick={search}>Search</Button>
+							<Button type="submit" disabled={!username.trim()}>Add exact username</Button>
 							<Button type="button" variant="ghost" aria-label="Cancel adding platform" onclick={() => { selectedPlatform = null; username = ''; }}><X /></Button>
 						</form>
+						{#each matches as match (match.id)}
+							<button class="platform-title" type="button" onclick={() => username = match.username}>
+								{#if match.profile_picture_url}<img class="avatar" src={match.profile_picture_url} alt="" />{/if}
+								<span><strong>@{match.username}</strong>{#if match.name}<br />{match.name}{/if}</span>
+							</button>
+						{/each}
 					{:else if availablePlatforms.length}
 						<div class="toolbar">
 							{#each availablePlatforms as platform (platform.id)}

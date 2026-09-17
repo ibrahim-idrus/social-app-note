@@ -162,6 +162,18 @@ func instagramIntegration(ctx context.Context, db *sql.DB) (InstagramIntegration
 	return integration, err
 }
 
+func ConfigureInstagramIntegration(ctx context.Context, db *sql.DB, accountID, username, accessToken string) error {
+	if accountID == "" || username == "" {
+		return nil
+	}
+	var token any
+	if accessToken != "" {
+		token = accessToken
+	}
+	_, err := db.ExecContext(ctx, `UPDATE instagram_integrations SET instagram_user_id=?, username=?, access_token=?, status='active', updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id='prototype'`, accountID, username, token)
+	return err
+}
+
 func ProcessInstagramDM(ctx context.Context, db *sql.DB, recipientID, senderID, externalMessageID, text, now string) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {

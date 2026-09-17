@@ -36,7 +36,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.Handler(db, httpapi.Options{SecureCookies: cfg.SessionCookieSecure}),
+		Handler:           httpapi.Handler(db, httpapi.Options{SecureCookies: cfg.SessionCookieSecure, InstagramAccountID: cfg.InstagramDedicatedAccountID, InstagramUsername: cfg.InstagramDedicatedUsername, InstagramAccessToken: cfg.InstagramAccessToken}),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {
