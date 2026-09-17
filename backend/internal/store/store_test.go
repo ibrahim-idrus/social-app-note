@@ -13,7 +13,7 @@ func TestOpenAppliesFoundationMigrationOnce(t *testing.T) {
 	}
 	defer db.Close()
 
-	for _, table := range []string{"users", "social_identities", "notes", "sessions"} {
+	for _, table := range []string{"users", "social_identities", "notes", "sessions", "instagram_integrations"} {
 		var count int
 		if err := db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&count); err != nil {
 			t.Fatal(err)
@@ -30,8 +30,48 @@ func TestOpenAppliesFoundationMigrationOnce(t *testing.T) {
 	if err := db.QueryRow(`SELECT count(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if count != 2 {
-		t.Fatalf("migration count = %d, want 2", count)
+	if count != 3 {
+		t.Fatalf("migration count = %d, want 3", count)
+	}
+}
+
+func TestInstagramPrototypeSchemaAndBootstrap(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "sqlite.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	var integrationID, instagramUserID, username, status string
+	var accessToken sql.NullString
+	if err := db.QueryRow(`
+		SELECT id, instagram_user_id, username, access_token, status
+		FROM instagram_integrations`).Scan(&integrationID, &instagramUserID, &username, &accessToken, &status); err != nil {
+		t.Fatal(err)
+	}
+	if integrationID != "prototype" || instagramUserID == "" || username == "" || accessToken.Valid || status != "active" {
+		t.Fatalf("prototype integration = %q %q %q %#v %q", integrationID, instagramUserID, username, accessToken, status)
+	}
+
+	columns := map[string]bool{}
+	rows, err := db.Query(`PRAGMA table_info(social_identities)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var name, columnType string
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			t.Fatal(err)
+		}
+		columns[name] = true
+	}
+	for _, name := range []string{"verification_code_hash", "verification_expires_at", "verification_consumed_at"} {
+		if !columns[name] {
+			t.Fatalf("missing social_identities.%s", name)
+		}
 	}
 }
 

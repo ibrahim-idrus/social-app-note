@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { api, type SocialIdentity, type SocialPlatform } from '$lib/api';
+	import { api, type InstagramRegistration, type SocialIdentity, type SocialPlatform } from '$lib/api';
 	import { appState } from '$lib/app-state.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -12,6 +12,7 @@
 	let username = $state('');
 	let error = $state('');
 	let loading = $state(true);
+	let registration = $state<InstagramRegistration | null>(null);
 	let availablePlatforms = $derived(platforms.filter((platform) => !identities.some((identity) => identity.platform === platform.id)));
 
 	async function load() {
@@ -25,10 +26,16 @@
 		if (!selectedPlatform) return;
 		error = '';
 		try {
-			identities = [...identities, await api.createSocialIdentity(selectedPlatform.id, username)];
+			registration = await api.createSocialIdentity(selectedPlatform.id, username);
+			identities = [...identities, registration];
 			username = '';
 			selectedPlatform = null;
 		} catch (cause) { error = cause instanceof Error ? cause.message : 'Identity could not be saved.'; }
+	}
+	async function regenerate(identity: SocialIdentity) {
+		error = '';
+		try { registration = await api.regenerateSocialIdentityCode(identity.id); }
+		catch (cause) { error = cause instanceof Error ? cause.message : 'Code could not be regenerated.'; }
 	}
 	async function remove(identity: SocialIdentity) {
 		error = '';
@@ -56,6 +63,16 @@
 					{#if error}<div class="notice error" role="alert">{error}</div>{/if}
 					{#each identities as identity (identity.id)}
 						<div class="platform-title"><span class="platform-icon"><MessageCircle size={20} /></span><div><strong>{platforms.find((platform) => platform.id === identity.platform)?.name ?? identity.platform}</strong><p class="field-help">@{identity.username} · {identity.status}</p></div></div>
+						{#if identity.status === 'pending'}
+							<div class="notice verification-instructions">
+								<div>
+									<p><strong>DM this code to @{(registration?.id === identity.id ? registration.instagram_account : identity.instagram_account)?.username ?? 'notedesk_inbox'}</strong></p>
+									{#if registration?.id === identity.id}<code>{registration.verification_code}</code>{:else}<p>Your code is hidden after reload.</p>{/if}
+									<p>The code expires after 10 minutes. Regenerate it if needed.</p>
+								</div>
+							</div>
+							<Button variant="outline" onclick={() => regenerate(identity)}>Regenerate code</Button>
+						{/if}
 						<Button variant="outline" onclick={() => remove(identity)}><Trash2 />Remove account</Button>
 					{/each}
 					{#if selectedPlatform}

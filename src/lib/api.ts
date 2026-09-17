@@ -21,8 +21,15 @@ export type SocialIdentity = {
 	avatar_url: string | null;
 	status: 'pending' | 'active';
 	verified_at: string | null;
+	verification_expires_at?: string;
+	instagram_account?: { instagram_user_id: string; username: string };
 	created_at: string;
 	updated_at: string;
+};
+export type InstagramRegistration = SocialIdentity & {
+	verification_code: string;
+	verification_expires_at: string;
+	instagram_account: { instagram_user_id: string; username: string };
 };
 
 const messages: Record<string, string> = {
@@ -87,7 +94,8 @@ export function createApiClient(fetcher: Fetch = fetch, cookies = () => typeof d
 		deleteNote: (id: number) => request<void>(`/api/notes/${id}`, { method: 'DELETE' }),
 		platforms: async () => (await request<{ platforms: SocialPlatform[] }>('/api/social-platforms')).platforms,
 		identities: async () => (await request<{ identities: SocialIdentity[] }>('/api/social-identities')).identities,
-		createSocialIdentity: (platform: string, username: string) => request<SocialIdentity>('/api/social-identities', { method: 'POST', body: JSON.stringify({ platform, username }) }),
+		createSocialIdentity: (platform: string, username: string) => request<InstagramRegistration>('/api/social-identities', { method: 'POST', body: JSON.stringify({ platform, username }) }),
+		regenerateSocialIdentityCode: (id: number) => request<InstagramRegistration>(`/api/social-identities/${id}/verification-code`, { method: 'POST' }),
 		deleteSocialIdentity: (id: number) => request<void>(`/api/social-identities/${id}`, { method: 'DELETE' })
 	};
 }

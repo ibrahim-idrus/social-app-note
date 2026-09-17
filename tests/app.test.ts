@@ -92,6 +92,38 @@ test('social capture uses an add-platform flow and hides occupied platforms', as
 	assert.doesNotMatch(source, /\(await api\.identities\(\)\)\[0\]/);
 });
 
+test('Instagram registration returns the one-time code and sends regeneration with CSRF', async () => {
+	const requests: Request[] = [];
+	const response = {
+		id: 4, platform: 'instagram', platform_user_id: null, username: 'alice', normalized_username: 'alice',
+		display_name: null, avatar_url: null, status: 'pending', verified_at: null, created_at: '', updated_at: '',
+		verification_code: 'ABC123', verification_expires_at: '2026-09-17T12:10:00Z',
+		instagram_account: { instagram_user_id: 'prototype-inbox', username: 'notedesk_inbox' }
+	};
+	const api = createApiClient(async (input, init) => {
+		requests.push(new Request(input, init));
+		return Response.json(response, { status: requests.length === 1 ? 201 : 200 });
+	}, () => 'csrf_token=token');
+
+	const created = await api.createSocialIdentity('instagram', 'alice');
+	const regenerated = await api.regenerateSocialIdentityCode(4);
+	assert.equal(created.verification_code, 'ABC123');
+	assert.equal(regenerated.instagram_account.username, 'notedesk_inbox');
+	assert.deepEqual(await requests[0].json(), { platform: 'instagram', username: 'alice' });
+	assert.equal(requests[1].url, 'http://localhost/api/social-identities/4/verification-code');
+	assert.equal(requests[1].headers.get('x-csrf-token'), 'token');
+});
+
+test('settings explains the dedicated Instagram inbox and keeps pending reload guidance', async () => {
+	const source = await (await import('node:fs/promises')).readFile('src/routes/settings/+page.svelte', 'utf8');
+	assert.match(source, /verification_code/);
+	assert.match(source, /instagram_account.*username/s);
+	assert.match(source, /DM this code/i);
+	assert.match(source, /10 minutes/i);
+	assert.match(source, /Regenerate code/i);
+	assert.match(source, /pending/i);
+});
+
 test('frontend contains no seeded, local-only, or simulated product state', async () => {
 	const { readFile } = await import('node:fs/promises');
 	const { glob } = await import('node:fs/promises');
