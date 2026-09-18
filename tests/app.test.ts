@@ -126,6 +126,31 @@ test('settings explains the dedicated Instagram inbox and keeps pending reload g
 	assert.match(source, /searchSocialIdentities/);
 });
 
+test('Instagram verification UI waits for backend state and cleans up bounded polling', async () => {
+	const source = await (await import('node:fs/promises')).readFile('src/routes/settings/+page.svelte', 'utf8');
+	for (const state of ['waiting', 'active', 'invalid_code', 'expired', 'system_failure']) {
+		assert.match(source, new RegExp(`['"]${state}['"]`));
+	}
+	assert.match(source, /I've sent the code/);
+	assert.match(source, /Waiting for Instagram verification/);
+	assert.match(source, /Instagram connected/);
+	assert.match(source, /verification code has expired/);
+	assert.match(source, /setInterval\(pollIdentities, 3000\)/);
+	assert.match(source, /if \(polling\) return/);
+	assert.match(source, /return stopPolling/);
+	assert.match(source, /clearInterval\(pollTimer\)/);
+	assert.match(source, /identities = await api\.identities\(\)/);
+	const sentBody = source.match(/function sent\([^]*?\n\t}/)?.[0] ?? '';
+	assert.doesNotMatch(sentBody, /status|active/);
+});
+
+test('social identity API exposes only the verification feedback contract', async () => {
+	const source = await (await import('node:fs/promises')).readFile('src/lib/api.ts', 'utf8');
+	assert.match(source, /verification_state: 'waiting' \| 'active' \| 'invalid_code' \| 'expired' \| 'system_failure'/);
+	assert.match(source, /verification_updated_at: string \| null/);
+	assert.doesNotMatch(source, /verification_code_hash|verification_consumed_at/);
+});
+
 test('frontend contains no seeded, local-only, or simulated product state', async () => {
 	const { readFile } = await import('node:fs/promises');
 	const { glob } = await import('node:fs/promises');

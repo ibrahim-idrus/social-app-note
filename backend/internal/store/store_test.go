@@ -1,9 +1,12 @@
 package store
 
 import (
+	"context"
+	"crypto/sha256"
 	"database/sql"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestOpenAppliesFoundationMigrationOnce(t *testing.T) {
@@ -30,8 +33,8 @@ func TestOpenAppliesFoundationMigrationOnce(t *testing.T) {
 	if err := db.QueryRow(`SELECT count(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if count != 3 {
-		t.Fatalf("migration count = %d, want 3", count)
+	if count != 4 {
+		t.Fatalf("migration count = %d, want 4", count)
 	}
 }
 
@@ -68,10 +71,17 @@ func TestInstagramPrototypeSchemaAndBootstrap(t *testing.T) {
 		}
 		columns[name] = true
 	}
-	for _, name := range []string{"verification_code_hash", "verification_expires_at", "verification_consumed_at"} {
+	for _, name := range []string{"verification_code_hash", "verification_expires_at", "verification_consumed_at", "verification_result", "verification_result_at"} {
 		if !columns[name] {
 			t.Fatalf("missing social_identities.%s", name)
 		}
+	}
+
+	if _, err := db.Exec(`INSERT INTO instagram_verification_replies (external_message_id, social_identity_id, result) VALUES ('event-1', 1, 'claimed')`); err == nil {
+		t.Fatal("reply claim accepted a missing identity")
+	}
+	if _, err := db.Exec(`INSERT INTO instagram_verification_replies (external_message_id, result) VALUES ('event-1', 'unknown')`); err == nil {
+		t.Fatal("reply claim accepted an invalid result")
 	}
 }
 
@@ -128,5 +138,89 @@ func TestSocialIdentityDatabaseConstraints(t *testing.T) {
 	}
 	if identityID.Valid {
 		t.Fatalf("social_identity_id = %d, want NULL", identityID.Int64)
+	}
+}
+
+func TestProcessInstagramDMReturnsVerificationOutcomesAndClaimsReplyAtomically(t *testing.T) {
+	newPending := func(t *testing.T, consumed bool, expiresAt string) (*sql.DB, string) {
+		t.Helper()
+		db, err := Open(filepath.Join(t.TempDir(), "sqlite.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { db.Close() })
+		code := "verification-code"
+		hash := sha256.Sum256([]byte(code))
+		if _, err := db.Exec(`INSERT INTO users (id, name, email, password_hash) VALUES (1, 'Alice', 'alice@example.com', 'hash')`); err != nil {
+			t.Fatal(err)
+		}
+		var consumedAt any
+		if consumed {
+			consumedAt = time.Now().UTC().Format(time.RFC3339Nano)
+		}
+		if _, err := db.Exec(`
+			INSERT INTO social_identities (
+				id, user_id, platform, username, normalized_username, status,
+				verification_code_hash, verification_expires_at, verification_consumed_at
+			) VALUES (1, 1, 'instagram', 'alice', 'alice', 'pending', ?, ?, ?)`, hash[:], expiresAt, consumedAt); err != nil {
+			t.Fatal(err)
+		}
+		return db, code
+	}
+	now := time.Now().UTC()
+
+	t.Run("activation and duplicate", func(t *testing.T) {
+		db, code := newPending(t, false, now.Add(time.Minute).Format(time.RFC3339Nano))
+		outcome, err := ProcessInstagramDM(context.Background(), db, "17841400000000000", "sender-1", "event-1", code, now.Format(time.RFC3339Nano))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if outcome.Kind != InstagramDMActivated || !outcome.OwnsReply || outcome.IdentityID != 1 || outcome.Username != "alice" {
+			t.Fatalf("activation outcome = %#v", outcome)
+		}
+		duplicate, err := ProcessInstagramDM(context.Background(), db, "17841400000000000", "sender-1", "event-1", code, now.Format(time.RFC3339Nano))
+		if err != nil || duplicate.Kind != InstagramDMDuplicate || duplicate.OwnsReply {
+			t.Fatalf("duplicate outcome = %#v, err %v", duplicate, err)
+		}
+		var status string
+		var claims, notes int
+		if err := db.QueryRow(`SELECT status FROM social_identities WHERE id = 1`).Scan(&status); err != nil {
+			t.Fatal(err)
+		}
+		if err := db.QueryRow(`SELECT count(*) FROM instagram_verification_replies`).Scan(&claims); err != nil {
+			t.Fatal(err)
+		}
+		if err := db.QueryRow(`SELECT count(*) FROM notes`).Scan(&notes); err != nil {
+			t.Fatal(err)
+		}
+		if status != "active" || claims != 1 || notes != 0 {
+			t.Fatalf("activation state = status %q, claims %d, notes %d", status, claims, notes)
+		}
+	})
+
+	for _, test := range []struct {
+		name, text, expiry string
+		consumed           bool
+		want               InstagramDMOutcomeKind
+		wantFeedback       string
+	}{
+		{"expired", "verification-code", now.Add(-time.Minute).Format(time.RFC3339Nano), false, InstagramDMExpired, "expired"},
+		{"safely attributable invalid", "verification-code", now.Add(time.Minute).Format(time.RFC3339Nano), true, InstagramDMInvalidCode, "invalid_code"},
+		{"unmatched code", "wrong-code", now.Add(time.Minute).Format(time.RFC3339Nano), false, InstagramDMUnmatched, "waiting"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			db, _ := newPending(t, test.consumed, test.expiry)
+			outcome, err := ProcessInstagramDM(context.Background(), db, "17841400000000000", "sender-1", "event-1", test.text, now.Format(time.RFC3339Nano))
+			if err != nil || outcome.Kind != test.want || outcome.OwnsReply {
+				t.Fatalf("outcome = %#v, err %v", outcome, err)
+			}
+			var feedback string
+			if err := db.QueryRow(`SELECT verification_result FROM social_identities WHERE id = 1`).Scan(&feedback); err != nil {
+				t.Fatal(err)
+			}
+			if feedback != test.wantFeedback {
+				t.Fatalf("verification_result = %q, want %q", feedback, test.wantFeedback)
+			}
+		})
 	}
 }

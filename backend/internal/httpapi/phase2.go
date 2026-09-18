@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
@@ -8,7 +10,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -150,12 +154,54 @@ func (api *API) simulatedInstagramDM(w http.ResponseWriter, r *http.Request) {
 	}
 	if !input.IsSelf && input.MessageType == "text" && input.Text != "" {
 		now := time.Now().UTC().Format(time.RFC3339Nano)
-		if err := store.ProcessInstagramDM(r.Context(), api.db, input.RecipientInstagramUserID, input.SenderPlatformUserID, input.ExternalMessageID, input.Text, now); err != nil {
+		outcome, err := store.ProcessInstagramDM(r.Context(), api.db, input.RecipientInstagramUserID, input.SenderPlatformUserID, input.ExternalMessageID, input.Text, now)
+		if err != nil {
 			writeError(w, http.StatusInternalServerError, "internal_error")
 			return
 		}
+		if outcome.OwnsReply {
+			sent := api.sendInstagramText(r.Context(), input.SenderPlatformUserID, fmt.Sprintf("Your @%s Instagram account is connected to %s.", outcome.Username, api.productName)) == nil
+			if err := store.RecordInstagramVerificationReply(r.Context(), api.db, input.ExternalMessageID, time.Now().UTC().Format(time.RFC3339Nano), sent); err != nil {
+				writeError(w, http.StatusInternalServerError, "internal_error")
+				return
+			}
+		}
 	}
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
+}
+
+func (api *API) sendInstagramText(ctx context.Context, recipientID, text string) error {
+	if api.instagramAccountID == "" || api.instagramAccessToken == "" {
+		return errors.New("instagram messaging is not configured")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	payload, err := json.Marshal(map[string]any{
+		"recipient": map[string]string{"id": recipientID},
+		"message":   map[string]string{"text": text},
+	})
+	if err != nil {
+		return err
+	}
+	endpoint := fmt.Sprintf("https://graph.instagram.com/%s/%s/messages", url.PathEscape(api.instagramGraphVersion), url.PathEscape(api.instagramAccountID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+api.instagramAccessToken)
+	req.Header.Set("Content-Type", "application/json")
+	res, err := api.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if _, err := io.Copy(io.Discard, io.LimitReader(res.Body, 64<<10)); err != nil {
+		return err
+	}
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
+		return errors.New("instagram send failed")
+	}
+	return nil
 }
 
 func newInstagramVerification() (string, []byte, string, error) {

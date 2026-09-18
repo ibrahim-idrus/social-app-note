@@ -14,7 +14,11 @@
 	let loading = $state(true);
 	let registration = $state<InstagramRegistration | null>(null);
 	let matches = $state<SocialAccountMatch[]>([]);
+	let waitingFor = $state<Set<number>>(new Set());
+	let pollTimer: ReturnType<typeof setInterval> | undefined;
+	let polling = false;
 	let availablePlatforms = $derived(platforms.filter((platform) => !identities.some((identity) => identity.platform === platform.id)));
+	const terminalStates = new Set<SocialIdentity['verification_state']>(['active', 'invalid_code', 'expired', 'system_failure']);
 
 	async function load() {
 		loading = true;
@@ -40,15 +44,50 @@
 	}
 	async function regenerate(identity: SocialIdentity) {
 		error = '';
-		try { registration = await api.regenerateSocialIdentityCode(identity.id); }
+		try {
+			registration = await api.regenerateSocialIdentityCode(identity.id);
+			identities = identities.map((item) => item.id === identity.id ? registration! : item);
+			waitingFor = new Set([...waitingFor].filter((id) => id !== identity.id));
+			syncPolling();
+		}
 		catch (cause) { error = cause instanceof Error ? cause.message : 'Code could not be regenerated.'; }
 	}
 	async function remove(identity: SocialIdentity) {
 		error = '';
-		try { await api.deleteSocialIdentity(identity.id); identities = identities.filter((item) => item.id !== identity.id); }
+		try {
+			await api.deleteSocialIdentity(identity.id);
+			identities = identities.filter((item) => item.id !== identity.id);
+			waitingFor = new Set([...waitingFor].filter((id) => id !== identity.id));
+			syncPolling();
+		}
 		catch (cause) { error = cause instanceof Error ? cause.message : 'Identity could not be removed.'; }
 	}
-	onMount(load);
+	function sent(identity: SocialIdentity) {
+		waitingFor = new Set(waitingFor).add(identity.id);
+		syncPolling();
+	}
+	async function pollIdentities() {
+		if (polling) return;
+		polling = true;
+		try {
+			identities = await api.identities();
+			waitingFor = new Set([...waitingFor].filter((id) => {
+				const identity = identities.find((item) => item.id === id);
+				return identity && !terminalStates.has(identity.verification_state);
+			}));
+		} catch (cause) { error = cause instanceof Error ? cause.message : 'Verification status could not be refreshed.'; }
+		finally { polling = false; syncPolling(); }
+	}
+	function syncPolling() {
+		const shouldPoll = identities.some((identity) => waitingFor.has(identity.id) && identity.verification_state === 'waiting');
+		if (shouldPoll && !pollTimer) pollTimer = setInterval(pollIdentities, 3000);
+		if (!shouldPoll && pollTimer) { clearInterval(pollTimer); pollTimer = undefined; }
+	}
+	function stopPolling() {
+		if (pollTimer) clearInterval(pollTimer);
+		pollTimer = undefined;
+	}
+	onMount(() => { void load(); return stopPolling; });
 </script>
 <svelte:head><title>Settings · NoteDesk</title></svelte:head>
 <div class="page page-narrow">
@@ -68,8 +107,20 @@
 				{:else}
 					{#if error}<div class="notice error" role="alert">{error}</div>{/if}
 					{#each identities as identity (identity.id)}
-						<div class="platform-title"><span class="platform-icon"><MessageCircle size={20} /></span><div><strong>{platforms.find((platform) => platform.id === identity.platform)?.name ?? identity.platform}</strong><p class="field-help">@{identity.username} · {identity.status}</p></div></div>
-						{#if identity.status === 'pending'}
+						<div class="platform-title"><span class="platform-icon"><MessageCircle size={20} /></span><div><strong>{platforms.find((platform) => platform.id === identity.platform)?.name ?? identity.platform}</strong><p class="field-help">@{identity.username}</p></div></div>
+						{#if identity.verification_state === 'active'}
+							<div class="notice"><strong>✓ Instagram connected</strong><p>@{identity.username}</p></div>
+						{:else if identity.verification_state === 'expired'}
+							<div class="notice error" role="status"><strong>Your verification code has expired</strong><p>Regenerate it and send the new code to Instagram.</p></div>
+							<Button variant="outline" onclick={() => regenerate(identity)}>Regenerate code</Button>
+						{:else if identity.verification_state === 'invalid_code'}
+							<div class="notice error" role="status"><strong>That verification code is no longer valid.</strong><p>Regenerate a code and try again.</p></div>
+							<Button variant="outline" onclick={() => regenerate(identity)}>Regenerate code</Button>
+						{:else if identity.verification_state === 'system_failure'}
+							<div class="notice error" role="status"><strong>Instagram verification needs another try.</strong><p>No automatic retry was sent. Remove and reconnect this account to try again.</p></div>
+						{:else if waitingFor.has(identity.id)}
+							<div class="notice" role="status"><strong>Waiting for Instagram verification…</strong><p>Keep this page open while NoteDesk checks the connection.</p></div>
+						{:else if identity.status === 'pending'}
 							<div class="notice verification-instructions">
 								<div>
 									<p><strong>DM this code to @{(registration?.id === identity.id ? registration.instagram_account : identity.instagram_account)?.username}</strong></p>
@@ -77,6 +128,7 @@
 									<p>The code expires after 10 minutes. Regenerate it if needed.</p>
 								</div>
 							</div>
+							<Button onclick={() => sent(identity)}>I've sent the code</Button>
 							<Button variant="outline" onclick={() => regenerate(identity)}>Regenerate code</Button>
 						{/if}
 						<Button variant="outline" onclick={() => remove(identity)}><Trash2 />Remove account</Button>

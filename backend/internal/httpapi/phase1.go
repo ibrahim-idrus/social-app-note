@@ -32,11 +32,12 @@ const (
 var dummyPasswordHash = []byte("$2a$10$7EqJtq98hPqEX7fNZaFWoO5JQ9jM.VgQ6mC4McT8yXQ7x1E2Vt8tK")
 
 type API struct {
-	db                                       *sql.DB
-	secureCookies                            bool
-	limiter                                  *loginLimiter
-	instagramAccountID, instagramAccessToken string
-	httpClient                               *http.Client
+	db                                                              *sql.DB
+	secureCookies                                                   bool
+	limiter                                                         *loginLimiter
+	instagramAccountID, instagramAccessToken, instagramGraphVersion string
+	productName                                                     string
+	httpClient                                                      *http.Client
 }
 
 type authentication struct {

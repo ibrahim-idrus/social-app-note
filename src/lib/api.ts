@@ -22,6 +22,8 @@ export type SocialIdentity = {
 	avatar_url: string | null;
 	status: 'pending' | 'active';
 	verified_at: string | null;
+	verification_state: 'waiting' | 'active' | 'invalid_code' | 'expired' | 'system_failure';
+	verification_updated_at: string | null;
 	verification_expires_at?: string;
 	instagram_account?: { instagram_user_id: string; username: string };
 	created_at: string;
