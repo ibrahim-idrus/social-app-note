@@ -14,6 +14,8 @@
 	let loading = $state(true);
 	let registration = $state<InstagramRegistration | null>(null);
 	let matches = $state<SocialAccountMatch[]>([]);
+	let searching = $state(false);
+	let searchCompleted = $state(false);
 	let waitingFor = $state<Set<number>>(new Set());
 	let pollTimer: ReturnType<typeof setInterval> | undefined;
 	let polling = false;
@@ -37,10 +39,29 @@
 			selectedPlatform = null;
 		} catch (cause) { error = cause instanceof Error ? cause.message : 'Identity could not be saved.'; }
 	}
-	async function search() {
+	function clearSearchResult() {
+		matches = [];
+		searchCompleted = false;
 		error = '';
-		try { matches = await api.searchSocialIdentities(username); }
-		catch (cause) { matches = []; error = cause instanceof Error ? cause.message : 'Instagram search failed.'; }
+	}
+	async function search() {
+		if (searching) return;
+		const query = username.trim();
+		if (!query) return;
+		clearSearchResult();
+		searching = true;
+		try {
+			const results = await api.searchSocialIdentities(query);
+			if (!selectedPlatform || username.trim() !== query) return;
+			matches = results;
+			searchCompleted = true;
+		}
+		catch (cause) {
+			if (!selectedPlatform || username.trim() !== query) return;
+			matches = [];
+			error = cause instanceof Error ? cause.message : 'Instagram search failed.';
+		}
+		finally { searching = false; }
 	}
 	async function regenerate(identity: SocialIdentity) {
 		error = '';
@@ -135,17 +156,19 @@
 					{/each}
 					{#if selectedPlatform}
 						<form class="toolbar" onsubmit={(event) => { event.preventDefault(); search(); }}>
-							<Input aria-label={`${selectedPlatform.name} username`} placeholder={`${selectedPlatform.name} username`} bind:value={username} />
-							<Button type="submit" disabled={!username.trim()}>Search</Button>
-							<Button type="button" variant="ghost" aria-label="Cancel adding platform" onclick={() => { selectedPlatform = null; username = ''; }}><X /></Button>
+							<Input aria-label={`${selectedPlatform.name} username`} placeholder={`${selectedPlatform.name} username`} bind:value={username} oninput={clearSearchResult} />
+							<Button type="submit" disabled={searching || !username.trim()}>{searching ? 'Searching…' : 'Search'}</Button>
+							<Button type="button" variant="ghost" aria-label="Cancel adding platform" onclick={() => { selectedPlatform = null; username = ''; clearSearchResult(); }}><X /></Button>
 						</form>
+						{#if searching}<p role="status" aria-live="polite">Searching…</p>{/if}
+						{#if searchCompleted && !searching && !error && matches.length === 0}<p class="field-help" role="status" aria-live="polite">No matching connected Instagram account was found. Verify the username matches the account connected to this app.</p>{/if}
 						{#each matches as match (match.id)}
 							<div class="account-result">
 								{#if match.profile_picture_url}<img src={match.profile_picture_url} alt="" />{:else}<span class="avatar-fallback" aria-hidden="true">IG</span>{/if}
 								<div><strong>{match.name || `@${match.username}`}</strong><span>@{match.username}</span><a href={`https://www.instagram.com/${match.username}/`} target="_blank" rel="noreferrer">View Instagram profile</a></div>
 							</div>
 							<p><strong>Is this your account?</strong></p>
-							<div class="toolbar"><Button onclick={() => add(match)}>Yes, connect this account</Button><Button variant="outline" onclick={() => { matches = []; username = ''; }}>No, search again</Button></div>
+							<div class="toolbar"><Button onclick={() => add(match)}>Yes, connect this account</Button><Button variant="outline" onclick={() => { username = ''; clearSearchResult(); }}>No, search again</Button></div>
 						{/each}
 					{:else if availablePlatforms.length}
 						<div class="toolbar">

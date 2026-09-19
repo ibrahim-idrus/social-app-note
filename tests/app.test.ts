@@ -142,6 +142,29 @@ test('Instagram connect requires confirming the exact discovery result', async (
 	assert.doesNotMatch(source, /Add exact username/);
 });
 
+test('Instagram search reports pending, empty, and failed outcomes without stale results or duplicate requests', async () => {
+	const source = await (await import('node:fs/promises')).readFile('src/routes/settings/+page.svelte', 'utf8');
+	assert.match(source, /let searching = \$state\(false\)/);
+	assert.match(source, /let searchCompleted = \$state\(false\)/);
+	assert.match(source, /if \(searching\) return/);
+	assert.match(source, /const query = username\.trim\(\)/);
+	assert.match(source, /searching = true[^]*await api\.searchSocialIdentities\(query\)[^]*searchCompleted = true[^]*finally \{ searching = false; \}/);
+	assert.match(source, /if \(!selectedPlatform \|\| username\.trim\(\) !== query\) return/);
+	assert.match(source, /disabled=\{searching \|\| !username\.trim\(\)\}/);
+	assert.match(source, /\{searching \? 'Searching…' : 'Search'\}/);
+	assert.match(source, /role="status"[^>]*aria-live="polite"[^>]*>Searching…</);
+	assert.match(source, /searchCompleted && !searching && !error && matches\.length === 0/);
+	assert.match(source, /No matching connected Instagram account was found\. Verify the username matches the account connected to this app\./);
+	assert.match(source, /\{#if error\}<div class="notice error" role="alert">\{error\}<\/div>\{\/if\}/);
+	assert.match(source, /function clearSearchResult\(\)[^]*matches = \[\][^]*searchCompleted = false/);
+	assert.match(source, /oninput=\{clearSearchResult\}/);
+	assert.match(source, /Cancel adding platform[^]*clearSearchResult\(\)/);
+	const searchBody = source.match(/async function search\(\) \{[^]*?\n\t\}/)?.[0] ?? '';
+	assert.match(searchBody, /clearSearchResult\(\)/);
+	assert.match(searchBody, /catch \(cause\)[^]*error = cause instanceof Error/);
+	assert.doesNotMatch(searchBody.match(/catch \(cause\)[^]*/)?.[0] ?? '', /searchCompleted = true/);
+});
+
 test('settings explains the dedicated Instagram inbox and keeps pending reload guidance', async () => {
 	const source = await (await import('node:fs/promises')).readFile('src/routes/settings/+page.svelte', 'utf8');
 	assert.match(source, /verification_code/);
