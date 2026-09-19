@@ -1,0 +1,128 @@
+<!doctype html><html lang="en" data-theme="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Instagram Verification Extension · Review Plan</title><style>:root{--bg:#0d1117;--panel:#151b23;--ink:#e6edf3;--muted:#9aa7b4;--line:#30363d;--accent:#79c0ff;--warn:#e3b341}html[data-theme=light]{--bg:#f6f8fa;--panel:#fff;--ink:#1f2328;--muted:#59636e;--line:#d0d7de;--accent:#0969da;--warn:#9a6700}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 Inter,ui-sans-serif,system-ui,sans-serif}header{border-bottom:1px solid var(--line);background:var(--panel)}.hero{max-width:1100px;margin:auto;padding:48px 24px}.eyebrow{color:var(--accent);font:700 12px/1.2 ui-monospace,monospace;text-transform:uppercase;letter-spacing:.12em}h1{font-size:clamp(32px,5vw,56px);line-height:1.05;margin:12px 0}.summary{max-width:760px;color:var(--muted);font-size:19px}.meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}.pill{border:1px solid var(--line);padding:6px 10px;border-radius:999px;color:var(--muted);font-size:13px}button{position:absolute;right:24px;top:20px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:9px 12px;cursor:pointer}main{max-width:1100px;margin:auto;padding:32px 24px 80px;display:grid;grid-template-columns:240px minmax(0,1fr);gap:44px}nav{position:sticky;top:24px;align-self:start;border:1px solid var(--line);background:var(--panel);padding:18px;border-radius:10px}nav a{display:block;color:var(--muted);text-decoration:none;padding:6px 0}nav a:hover{color:var(--accent)}article{min-width:0}h2{margin-top:48px;padding-top:12px;border-top:1px solid var(--line);font-size:27px}h3{margin-top:32px;font-size:20px}p,li{color:var(--muted)}strong{color:var(--ink)}code{font:14px ui-monospace,SFMono-Regular,monospace;background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--accent);padding:2px 5px;border-radius:4px}pre{overflow:auto;padding:18px;border:1px solid var(--line);border-radius:9px;background:#080b10}pre code{background:none;color:#d2e7ff;padding:0}blockquote{margin:18px 0;padding:14px 18px;border:1px solid var(--warn);border-radius:8px;color:var(--warn)}ul{padding-left:22px}.gate{margin-top:40px;border:1px solid var(--warn);padding:20px;border-radius:10px}@media(max-width:780px){main{display:block}nav{position:static;margin-bottom:28px}button{position:static;margin-top:16px}}:focus-visible{outline:3px solid var(--accent);outline-offset:3px}</style></head><body><header><button id="theme" aria-pressed="false">Light mode</button><div class="hero"><div class="eyebrow">Review plan · implementation gated</div><h1>Instagram verification: reply + truthful status</h1><p class="summary">A minimum-change extension of the existing flow, using Instagram Login and an Instagram User access token. No account discovery work.</p><div class="meta"><span class="pill">Branch: main</span><span class="pill">Meta: graph.instagram.com</span><span class="pill">Status: awaiting approval</span></div></div></header><main><nav aria-label="Contents"><strong>Contents</strong><a href="#confirmed-decisions">Confirmed decisions</a><a href="#current-evidence">Current evidence</a><a href="#official-meta-contract-instagram-login">Meta contract</a><a href="#ordered-implementation-plan">Implementation</a><a href="#acceptance-criteria">Acceptance</a><a href="#implementation-gate">Approval gate</a></nav><article><h1 id="instagram-verification-reply-and-status-implementation-plan">Instagram Verification Reply and Status Implementation Plan</h1>
+<blockquote><strong>For Hermes:</strong> Implement task-by-task with Codex on <code>main</code>, verifying each ordered item before starting the next.</blockquote>
+<p><strong>Goal:</strong> Extend the existing Instagram verification flow with one duplicate-safe success reply and backend-driven waiting, success, invalid, expired, and recoverable-failure feedback.</p>
+<p><strong>Architecture:</strong> Keep <code>ProcessInstagramDM</code> as the source of truth for activation and note suppression. Add minimal persisted verification-result and outbound-attempt metadata, expose sanitized fields through the existing identity-list API, poll that API only while pending, and send through Meta&#x27;s Instagram Login messaging endpoint after activation commits.</p>
+<p><strong>Tech Stack:</strong> Go <code>net/http</code> + SQLite, SvelteKit/Svelte 5, existing Node and Go tests.</p>
+<hr>
+<h2 id="confirmed-decisions">Confirmed decisions</h2>
+<ul>
+<li>Work directly on <code>main</code> after explicit implementation approval.</li>
+<li>Authentication topology is <strong>Instagram Login with an Instagram User access token</strong>.</li>
+<li>Do not use Facebook Login, a Page access token, or the Page-linked Messenger endpoint.</li>
+<li>Manual Instagram username entry remains unchanged.</li>
+<li>Do not add username search, discovery, autocomplete, dropdowns, Business Discovery, profile lookup, arbitrary account lookup, or <code>/api/social-identities/search</code> as part of this task.</li>
+<li>The verification message activates the identity and never becomes a note.</li>
+</ul>
+<h2 id="current-evidence">Current evidence</h2>
+<ul>
+<li><code>src/routes/settings/+page.svelte</code> loads identities once on mount and currently renders only the raw <code>pending</code> status; it has no waiting action or polling.</li>
+<li><code>src/lib/api.ts</code> already provides identity list/create/regenerate calls.</li>
+<li><code>backend/internal/httpapi/phase2.go</code> creates 10-minute codes and sends simulated inbound DMs into the store.</li>
+<li><code>backend/internal/store/phase2.go:177-239</code> transactionally suppresses a consumed verification code, routes later DMs by stable sender ID, activates an unexpired pending identity, and does not create a note for a successful verification message.</li>
+<li>Existing tests already cover replacement, expiration, single use, note suppression, stable-ID routing, isolation, and note deduplication.</li>
+</ul>
+<h2 id="official-meta-contract-instagram-login">Official Meta contract — Instagram Login</h2>
+<p>Verified against Meta documentation on 2026-09-17:</p>
+<ul>
+<li>Messaging overview: https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/messaging-api</li>
+<li>Send API host and operation: <code>POST https://graph.instagram.com/v26.0/{IG_ID}/messages</code></li>
+<li>Authentication: <code>Authorization: Bearer &lt;Instagram User access token&gt;</code></li>
+<li>Text payload: <code>{&quot;recipient&quot;:{&quot;id&quot;:&quot;&lt;IGSID&gt;&quot;},&quot;message&quot;:{&quot;text&quot;:&quot;&lt;TEXT&gt;&quot;}}</code></li>
+<li>Required permissions documented for this topology: <code>instagram_business_basic</code> and <code>instagram_business_manage_messages</code>.</li>
+<li>The recipient must have initiated messaging with the professional Instagram account; this verification DM satisfies that prerequisite.</li>
+</ul>
+<p>The implementation must keep the Graph version configurable or reuse the project&#x27;s selected version rather than scattering it. It must never log or return the access token or raw Meta response.</p>
+<h2 id="ordered-implementation-plan">Ordered implementation plan</h2>
+<h3 id="1-add-failing-backend-tests-for-outcomes-and-reply-deduplication">1. Add failing backend tests for outcomes and reply deduplication</h3>
+<p><strong>Modify:</strong> <code>backend/internal/httpapi/instagram_test.go</code></p>
+<p>Add mocked-HTTP tests proving:</p>
+<ul>
+<li>Successful activation produces exactly one request with the Instagram Login host, bearer token, recipient sender ID, and product-aware success text.</li>
+<li>Duplicate delivery of the same external event ID does not send twice.</li>
+<li>Invalid, expired, unmatched, malformed, already-consumed, and system-failure paths do not send a success reply.</li>
+<li>The verification message still creates zero notes.</li>
+<li>Meta response details and credentials are not exposed.</li>
+</ul>
+<p>Run the targeted tests and confirm they fail for missing behavior before implementation.</p>
+<h3 id="2-persist-only-the-state-required-for-truthful-ui-and-one-send-attempt">2. Persist only the state required for truthful UI and one send attempt</h3>
+<p><strong>Create:</strong> <code>backend/internal/store/migrations/0004_instagram_verification_feedback.sql</code></p>
+<p>Add the smallest columns/table needed to represent:</p>
+<ul>
+<li>recoverable verification result (<code>waiting</code>, <code>invalid_code</code>, <code>expired</code>, <code>system_failure</code>; <code>active</code> remains the existing identity status),</li>
+<li>result timestamp,</li>
+<li>unique inbound external message ID used to claim the automatic reply,</li>
+<li>reply attempt timestamp/result without storing tokens or raw Meta payloads.</li>
+</ul>
+<p>Prefer a unique database constraint for the inbound event claim. Do not add new permanent identity lifecycle states when the existing <code>pending</code>/<code>active</code> model suffices.</p>
+<p><strong>Modify/Test:</strong> <code>backend/internal/store/store_test.go</code> and migration assertions.</p>
+<h3 id="3-return-a-structured-activation-outcome-from-the-existing-store-path">3. Return a structured activation outcome from the existing store path</h3>
+<p><strong>Modify:</strong> <code>backend/internal/store/phase2.go</code></p>
+<p>Refactor <code>ProcessInstagramDM</code> minimally so the caller can distinguish:</p>
+<ul>
+<li>activation succeeded and owns the reply claim,</li>
+<li>duplicate/no-op,</li>
+<li>invalid code,</li>
+<li>expired code,</li>
+<li>unmatched sender/code,</li>
+<li>system failure.</li>
+</ul>
+<p>Keep activation and reply-claim persistence atomic. Commit activation before any network request. Preserve stable sender routing, cross-user isolation, single-use behavior, and note suppression.</p>
+<p>For invalid/expired input, update only a safely attributable pending identity. Do not assign arbitrary invalid text globally or leak whether another user&#x27;s code exists.</p>
+<h3 id="4-add-the-minimal-instagram-login-text-sender">4. Add the minimal Instagram Login text sender</h3>
+<p><strong>Modify:</strong> <code>backend/internal/httpapi/phase1.go</code>, <code>backend/internal/httpapi/health.go</code>, <code>backend/internal/httpapi/phase2.go</code></p>
+<p>Use the existing injected <code>http.Client</code>. Add one focused helper that:</p>
+<ul>
+<li>posts to <code>https://graph.instagram.com/v26.0/{dedicated_IG_ID}/messages</code>,</li>
+<li>supplies the Instagram User token as a bearer token,</li>
+<li>JSON-encodes <code>recipient.id</code> and <code>message.text</code>,</li>
+<li>uses the configured product name if one exists, otherwise the established <code>NoteDesk</code> name,</li>
+<li>mentions <code>@&lt;username&gt;</code> but never the user&#x27;s email,</li>
+<li>bounds request time and response-body reads,</li>
+<li>converts all failures to sanitized internal outcomes.</li>
+</ul>
+<p>Call it only when the committed store outcome says this event activated the identity and owns the one reply attempt. Because Meta documents no request idempotency key, do not automatically retry an ambiguous network/timeout result; record a recoverable <code>system_failure</code> instead.</p>
+<h3 id="5-expose-sanitized-backend-driven-feedback">5. Expose sanitized backend-driven feedback</h3>
+<p><strong>Modify:</strong> <code>backend/internal/store/phase2.go</code>, <code>src/lib/api.ts</code></p>
+<p>Extend the existing identity response with only UI-safe fields such as <code>verification_state</code> and <code>verification_updated_at</code>. Derive <code>expired</code> from the authoritative expiry when appropriate. Never expose hashes, consumed timestamps, event IDs, Meta errors, tokens, database IDs beyond the already-public identity ID, or webhook payloads.</p>
+<p>Code regeneration resets recoverable feedback to the normal pending state and makes the old code remain invalid.</p>
+<h3 id="6-add-the-smallest-waiting-and-polling-ui">6. Add the smallest waiting and polling UI</h3>
+<p><strong>Modify:</strong> <code>src/routes/settings/+page.svelte</code>, and only if needed <code>src/routes/layout.css</code></p>
+<ul>
+<li>Add an “I&#x27;ve sent the code” action that changes display state to waiting but never sets <code>active</code> locally.</li>
+<li>While pending/waiting, poll the existing identity-list API at a modest interval and stop on active, removal, navigation, or terminal feedback.</li>
+<li>Render actual backend state:</li>
+<li>waiting: “Waiting for Instagram verification…”</li>
+<li>active: “✓ Instagram connected” and the connected username</li>
+<li>invalid: recoverable guidance without permanent failure</li>
+<li>expired: “Your verification code has expired” plus existing regeneration action</li>
+<li>system failure: generic recoverable message and retry/regeneration path</li>
+<li>Preserve the existing visual system and manual username input. No WebSockets and no search-related work.</li>
+</ul>
+<h3 id="7-add-frontend-state-tests">7. Add frontend state tests</h3>
+<p><strong>Modify:</strong> <code>tests/app.test.ts</code> (or the smallest existing Svelte test target)</p>
+<p>Verify source/API behavior for waiting, backend-confirmed active, invalid, expired, and recoverable failure. Prove the sent button does not mark the identity active and polling is bounded/cleaned up.</p>
+<h3 id="8-ordered-verification-and-delivery">8. Ordered verification and delivery</h3>
+<p>Run each before proceeding to the next command; stop and fix failures:</p>
+<pre><code>cd backend &amp;&amp; go test ./internal/store ./internal/httpapi
+cd .. &amp;&amp; npm test
+cd backend &amp;&amp; go test ./...
+cd .. &amp;&amp; npm run check
+npm run build
+git diff --check
+git status --short --branch</code></pre>
+<p>Then inspect the exact diff, confirm no search/discovery changes were introduced, perform authenticated public E2E for waiting → webhook/simulation → active and fallback states, commit on <code>main</code>, push, and report public link, commit, and push result.</p>
+<h2 id="delivery-semantics-and-risk">Delivery semantics and risk</h2>
+<p>Meta&#x27;s Send API does not provide a documented idempotency key. The defensible guarantee is <strong>one database-claimed automatic send attempt per unique inbound event</strong>. Retrying an ambiguous timeout could duplicate a user-visible message, so ambiguous outcomes become recoverable system failures rather than automatic retries. A confirmed HTTP failure may be exposed only as sanitized UI state.</p>
+<p>A production real webhook is not invented in this task. The reply hooks into the repository&#x27;s existing inbound architecture; if only the simulated endpoint is currently enabled, real Meta webhook enablement/signature validation remains a separate deployment prerequisite.</p>
+<h2 id="acceptance-criteria">Acceptance criteria</h2>
+<ul>
+<li>Exactly one success-reply attempt follows a valid, unexpired, unused, sender-matched activation.</li>
+<li>No success reply follows invalid, expired, unmatched, malformed, duplicate, consumed, or failed activation.</li>
+<li>Verification DM creates no note.</li>
+<li>UI states come from backend identity data; clicking sent never activates locally.</li>
+<li>Old regenerated codes remain invalid.</li>
+<li>No secrets or raw provider errors reach the UI.</li>
+<li>No deferred search/discovery feature is added or changed.</li>
+</ul>
+<h2 id="implementation-gate">Implementation gate</h2>
+<p><strong>No implementation is authorized by this plan.</strong> Begin edits only after Baimeme explicitly approves implementation. Approval of the Instagram Login topology or this review artifact alone is not implementation permission.</p><section class="gate"><strong>STOPPED</strong><p>No application code will be changed until explicit implementation approval.</p></section></article></main><script>const r=document.documentElement,b=document.getElementById('theme');function set(t){r.dataset.theme=t;localStorage.setItem('review-theme',t);b.textContent=t==='dark'?'Light mode':'Dark mode';b.setAttribute('aria-pressed',t==='light')}set(localStorage.getItem('review-theme')||'dark');b.onclick=()=>set(r.dataset.theme==='dark'?'light':'dark');</script></body></html>

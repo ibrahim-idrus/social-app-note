@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -31,7 +32,16 @@ func newTestClient(t *testing.T, secure bool) *testClient {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	return &testClient{handler: Handler(db, Options{SecureCookies: secure}), db: db}
+	return &testClient{handler: Handler(db, Options{
+		SecureCookies: secure, InstagramAccountID: "selected-account", InstagramAccessToken: "token",
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if req.URL.Host == "graph.facebook.com" {
+				username := strings.Split(strings.Split(req.URL.RawQuery, "business_discovery.username(")[1], ")")[0]
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"business_discovery":{"id":"ig-` + username + `","username":"` + username + `"}}`)), Header: make(http.Header)}, nil
+			}
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{}`)), Header: make(http.Header)}, nil
+		})},
+	}), db: db}
 }
 
 func (c *testClient) request(t *testing.T, method, path string, body any, csrf bool) *httptest.ResponseRecorder {

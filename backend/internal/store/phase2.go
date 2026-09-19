@@ -92,7 +92,7 @@ func ListSocialIdentities(ctx context.Context, db *sql.DB, userID int64) ([]Soci
 	return identities, rows.Err()
 }
 
-func CreatePendingSocialIdentity(ctx context.Context, db *sql.DB, userID int64, platform, username string, codeHash []byte, expiresAt string) (SocialIdentity, error) {
+func CreatePendingSocialIdentity(ctx context.Context, db *sql.DB, userID int64, platform, platformUserID, username, displayName, avatarURL string, codeHash []byte, expiresAt string) (SocialIdentity, error) {
 	var occupied bool
 	if err := db.QueryRowContext(ctx, `SELECT EXISTS(
 		SELECT 1 FROM social_identities WHERE user_id = ? AND platform = ?
@@ -104,9 +104,9 @@ func CreatePendingSocialIdentity(ctx context.Context, db *sql.DB, userID int64, 
 	}
 	result, err := db.ExecContext(ctx, `
 		INSERT INTO social_identities (
-			user_id, platform, username, normalized_username, status,
+			user_id, platform, platform_user_id, username, normalized_username, display_name, avatar_url, status,
 			verification_code_hash, verification_expires_at, verification_result, verification_result_at
-		) VALUES (?, ?, ?, ?, 'pending', ?, ?, 'waiting', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`, userID, platform, username, username, codeHash, expiresAt)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, 'waiting', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`, userID, platform, platformUserID, username, username, displayName, avatarURL, codeHash, expiresAt)
 	if err != nil {
 		message := err.Error()
 		if strings.Contains(message, "social_identities.user_id, social_identities.platform") {

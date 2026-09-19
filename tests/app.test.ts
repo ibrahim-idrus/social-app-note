@@ -45,7 +45,7 @@ test('logout is sent without a CSRF dependency so a stale client token cannot ke
 
 test('API errors retain status and translate backend error codes', async () => {
 	const api = createApiClient(async () => Response.json({ error: 'identity_unavailable' }, { status: 409 }));
-	await assert.rejects(api.createSocialIdentity('instagram', 'alice'), (error) => {
+	await assert.rejects(api.createSocialIdentity('instagram', { id: 'ig-1', username: 'alice', name: 'Alice', profile_picture_url: '' }), (error) => {
 		assert.ok(error instanceof ApiError);
 		assert.equal(error.status, 409);
 		assert.equal(error.message, 'This Instagram identity is unavailable.');
@@ -105,13 +105,25 @@ test('Instagram registration returns the one-time code and sends regeneration wi
 		return Response.json(response, { status: requests.length === 1 ? 201 : 200 });
 	}, () => 'csrf_token=token');
 
-	const created = await api.createSocialIdentity('instagram', 'alice');
+	const created = await api.createSocialIdentity('instagram', { id: 'ig-1', username: 'alice', name: 'Alice', profile_picture_url: '' });
 	const regenerated = await api.regenerateSocialIdentityCode(4);
 	assert.equal(created.verification_code, 'ABC123');
 	assert.equal(regenerated.instagram_account.username, 'notedesk_inbox');
-	assert.deepEqual(await requests[0].json(), { platform: 'instagram', username: 'alice' });
+	assert.deepEqual(await requests[0].json(), { platform: 'instagram', platform_user_id: 'ig-1', username: 'alice' });
 	assert.equal(requests[1].url, 'http://localhost/api/social-identities/4/verification-code');
 	assert.equal(requests[1].headers.get('x-csrf-token'), 'token');
+});
+
+test('Instagram connect requires confirming the exact discovery result', async () => {
+	const source = await (await import('node:fs/promises')).readFile('src/routes/settings/+page.svelte', 'utf8');
+	assert.match(source, /Is this your account\?/);
+	assert.match(source, /Yes, connect this account/);
+	assert.match(source, /No, search again/);
+	assert.match(source, /instagram\.com\/\$\{match\.username\}/);
+	assert.match(source, /match\.profile_picture_url/);
+	assert.match(source, /match\.name/);
+	assert.match(source, /@\{match\.username\}/);
+	assert.doesNotMatch(source, /Add exact username/);
 });
 
 test('settings explains the dedicated Instagram inbox and keeps pending reload guidance', async () => {

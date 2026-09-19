@@ -27,13 +27,13 @@
 		catch (cause) { error = cause instanceof Error ? cause.message : 'Settings could not load.'; }
 		finally { loading = false; }
 	}
-	async function add() {
+	async function add(match: SocialAccountMatch) {
 		if (!selectedPlatform) return;
 		error = '';
 		try {
-			registration = await api.createSocialIdentity(selectedPlatform.id, username);
+			registration = await api.createSocialIdentity(selectedPlatform.id, match);
 			identities = [...identities, registration];
-			username = '';
+			username = ''; matches = [];
 			selectedPlatform = null;
 		} catch (cause) { error = cause instanceof Error ? cause.message : 'Identity could not be saved.'; }
 	}
@@ -134,17 +134,18 @@
 						<Button variant="outline" onclick={() => remove(identity)}><Trash2 />Remove account</Button>
 					{/each}
 					{#if selectedPlatform}
-						<form class="toolbar" onsubmit={(event) => { event.preventDefault(); add(); }}>
+						<form class="toolbar" onsubmit={(event) => { event.preventDefault(); search(); }}>
 							<Input aria-label={`${selectedPlatform.name} username`} placeholder={`${selectedPlatform.name} username`} bind:value={username} />
-							<Button type="button" variant="outline" disabled={!username.trim()} onclick={search}>Search</Button>
-							<Button type="submit" disabled={!username.trim()}>Add exact username</Button>
+							<Button type="submit" disabled={!username.trim()}>Search</Button>
 							<Button type="button" variant="ghost" aria-label="Cancel adding platform" onclick={() => { selectedPlatform = null; username = ''; }}><X /></Button>
 						</form>
 						{#each matches as match (match.id)}
-							<button class="platform-title" type="button" onclick={() => username = match.username}>
-								{#if match.profile_picture_url}<img class="avatar" src={match.profile_picture_url} alt="" />{/if}
-								<span><strong>@{match.username}</strong>{#if match.name}<br />{match.name}{/if}</span>
-							</button>
+							<div class="account-result">
+								{#if match.profile_picture_url}<img src={match.profile_picture_url} alt="" />{:else}<span class="avatar-fallback" aria-hidden="true">IG</span>{/if}
+								<div><strong>{match.name || `@${match.username}`}</strong><span>@{match.username}</span><a href={`https://www.instagram.com/${match.username}/`} target="_blank" rel="noreferrer">View Instagram profile</a></div>
+							</div>
+							<p><strong>Is this your account?</strong></p>
+							<div class="toolbar"><Button onclick={() => add(match)}>Yes, connect this account</Button><Button variant="outline" onclick={() => { matches = []; username = ''; }}>No, search again</Button></div>
 						{/each}
 					{:else if availablePlatforms.length}
 						<div class="toolbar">

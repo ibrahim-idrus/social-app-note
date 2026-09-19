@@ -30,7 +30,13 @@ func newInstagramReplyTestClient(t *testing.T, transport roundTripFunc) *testCli
 			InstagramAccountID:   "17841426326903892",
 			InstagramUsername:    "notedesk_inbox",
 			InstagramAccessToken: "instagram-user-token",
-			HTTPClient:           &http.Client{Transport: transport},
+			HTTPClient: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				if req.URL.Host == "graph.facebook.com" {
+					username := strings.Split(strings.Split(req.URL.RawQuery, "business_discovery.username(")[1], ")")[0]
+					return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"business_discovery":{"id":"ig-` + username + `","username":"` + username + `"}}`)), Header: make(http.Header)}, nil
+				}
+				return transport(req)
+			})},
 		}),
 		db: db,
 	}
@@ -53,7 +59,7 @@ type instagramRegistration struct {
 func registerInstagram(t *testing.T, c *testClient, username string) instagramRegistration {
 	t.Helper()
 	res := c.request(t, http.MethodPost, "/api/social-identities", map[string]string{
-		"platform": "instagram", "username": username,
+		"platform": "instagram", "platform_user_id": "ig-" + strings.ToLower(username), "username": username,
 	}, true)
 	if res.Code != http.StatusCreated {
 		t.Fatalf("create identity = %d %s", res.Code, res.Body.String())

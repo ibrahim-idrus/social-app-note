@@ -26,6 +26,33 @@ func (api *API) socialPlatforms(w http.ResponseWriter, _ *http.Request, _ authen
 	}}})
 }
 
+type instagramAccountMatch struct {
+	ID                string `json:"id"`
+	Username          string `json:"username"`
+	Name              string `json:"name"`
+	ProfilePictureURL string `json:"profile_picture_url"`
+}
+
+func (api *API) discoverInstagramAccount(ctx context.Context, username string) (*instagramAccountMatch, error) {
+	u := fmt.Sprintf("https://graph.facebook.com/v23.0/%s?fields=business_discovery.username(%s){id,username,name,profile_picture_url}&access_token=%s", api.instagramAccountID, username, api.instagramAccessToken)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	res, err := api.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil, errors.New("instagram search failed")
+	}
+	var out struct {
+		BusinessDiscovery *instagramAccountMatch `json:"business_discovery"`
+	}
+	if json.NewDecoder(res.Body).Decode(&out) != nil {
+		return nil, nil
+	}
+	return out.BusinessDiscovery, nil
+}
+
 func (api *API) searchSocialIdentities(w http.ResponseWriter, r *http.Request, _ authentication) {
 	username, ok := normalizeInstagramUsername(r.URL.Query().Get("username"))
 	if !ok {
@@ -36,31 +63,16 @@ func (api *API) searchSocialIdentities(w http.ResponseWriter, r *http.Request, _
 		writeError(w, http.StatusServiceUnavailable, "instagram_search_unavailable")
 		return
 	}
-	u := fmt.Sprintf("https://graph.facebook.com/v23.0/%s?fields=business_discovery.username(%s){id,username,name,profile_picture_url}&access_token=%s", api.instagramAccountID, username, api.instagramAccessToken)
-	req, _ := http.NewRequestWithContext(r.Context(), http.MethodGet, u, nil)
-	res, err := api.httpClient.Do(req)
+	account, err := api.discoverInstagramAccount(r.Context(), username)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "instagram_search_failed")
 		return
 	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		writeError(w, http.StatusBadGateway, "instagram_search_failed")
-		return
-	}
-	var out struct {
-		BusinessDiscovery *struct {
-			ID                string `json:"id"`
-			Username          string `json:"username"`
-			Name              string `json:"name"`
-			ProfilePictureURL string `json:"profile_picture_url"`
-		} `json:"business_discovery"`
-	}
-	if json.NewDecoder(res.Body).Decode(&out) != nil || out.BusinessDiscovery == nil {
+	if account == nil {
 		writeJSON(w, http.StatusOK, map[string]any{"accounts": []any{}})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"accounts": []any{out.BusinessDiscovery}})
+	writeJSON(w, http.StatusOK, map[string]any{"accounts": []any{account}})
 }
 
 func (api *API) listSocialIdentities(w http.ResponseWriter, r *http.Request, auth authentication) {
@@ -74,15 +86,29 @@ func (api *API) listSocialIdentities(w http.ResponseWriter, r *http.Request, aut
 
 func (api *API) createSocialIdentity(w http.ResponseWriter, r *http.Request, auth authentication) {
 	var input struct {
-		Platform string `json:"platform"`
-		Username string `json:"username"`
+		Platform       string `json:"platform"`
+		PlatformUserID string `json:"platform_user_id"`
+		Username       string `json:"username"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
 	}
 	username, ok := normalizeInstagramUsername(input.Username)
-	if input.Platform != "instagram" || !ok {
+	if input.Platform != "instagram" || input.PlatformUserID == "" || len(input.PlatformUserID) > 128 || !ok {
 		writeError(w, http.StatusBadRequest, "invalid_input")
+		return
+	}
+	if api.instagramAccountID == "" || api.instagramAccessToken == "" {
+		writeError(w, http.StatusServiceUnavailable, "instagram_search_unavailable")
+		return
+	}
+	account, err := api.discoverInstagramAccount(r.Context(), username)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "instagram_search_failed")
+		return
+	}
+	if account == nil || account.ID != input.PlatformUserID || account.Username != username {
+		writeError(w, http.StatusConflict, "instagram_account_changed")
 		return
 	}
 	code, codeHash, expiresAt, err := newInstagramVerification()
@@ -90,7 +116,7 @@ func (api *API) createSocialIdentity(w http.ResponseWriter, r *http.Request, aut
 		writeError(w, http.StatusInternalServerError, "internal_error")
 		return
 	}
-	identity, err := store.CreatePendingSocialIdentity(r.Context(), api.db, auth.ID, input.Platform, username, codeHash, expiresAt)
+	identity, err := store.CreatePendingSocialIdentity(r.Context(), api.db, auth.ID, input.Platform, account.ID, username, account.Name, account.ProfilePictureURL, codeHash, expiresAt)
 	if errors.Is(err, store.ErrPlatformIdentityAlreadyRegistered) {
 		writeError(w, http.StatusConflict, "platform_identity_already_registered")
 		return

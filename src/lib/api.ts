@@ -48,7 +48,8 @@ const messages: Record<string, string> = {
 	identity_not_found: 'This social identity was not found.',
 	internal_error: 'The service could not complete the request.',
 	instagram_search_unavailable: 'Instagram account lookup needs an access token in .env.',
-	instagram_search_failed: 'Instagram could not look up that professional account.'
+	instagram_search_failed: 'Instagram could not look up that professional account.',
+	instagram_account_changed: 'This Instagram account changed or is no longer available. Search again.'
 };
 
 export class ApiError extends Error {
@@ -100,7 +101,7 @@ export function createApiClient(fetcher: Fetch = fetch, cookies = () => typeof d
 		platforms: async () => (await request<{ platforms: SocialPlatform[] }>('/api/social-platforms')).platforms,
 		identities: async () => (await request<{ identities: SocialIdentity[] }>('/api/social-identities')).identities,
 		searchSocialIdentities: async (username: string) => (await request<{ accounts: SocialAccountMatch[] }>(`/api/social-identities/search?username=${encodeURIComponent(username)}`)).accounts,
-		createSocialIdentity: (platform: string, username: string) => request<InstagramRegistration>('/api/social-identities', { method: 'POST', body: JSON.stringify({ platform, username }) }),
+		createSocialIdentity: (platform: string, account: SocialAccountMatch) => request<InstagramRegistration>('/api/social-identities', { method: 'POST', body: JSON.stringify({ platform, platform_user_id: account.id, username: account.username }) }),
 		regenerateSocialIdentityCode: (id: number) => request<InstagramRegistration>(`/api/social-identities/${id}/verification-code`, { method: 'POST' }),
 		deleteSocialIdentity: (id: number) => request<void>(`/api/social-identities/${id}`, { method: 'DELETE' })
 	};
