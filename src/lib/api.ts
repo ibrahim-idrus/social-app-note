@@ -47,8 +47,9 @@ const messages: Record<string, string> = {
 	note_not_found: 'This note was not found.',
 	identity_not_found: 'This social identity was not found.',
 	internal_error: 'The service could not complete the request.',
-	instagram_search_unavailable: 'Instagram account lookup needs an access token in .env.',
-	instagram_search_failed: 'Instagram could not look up that professional account.',
+	instagram_search_unavailable: 'Instagram account lookup is not configured.',
+	instagram_auth_failed: 'Instagram account lookup needs a valid access token.',
+	instagram_search_failed: 'Instagram account lookup is temporarily unavailable.',
 	instagram_account_changed: 'This Instagram account changed or is no longer available. Search again.'
 };
 

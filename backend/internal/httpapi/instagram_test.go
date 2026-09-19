@@ -31,9 +31,8 @@ func newInstagramReplyTestClient(t *testing.T, transport roundTripFunc) *testCli
 			InstagramUsername:    "notedesk_inbox",
 			InstagramAccessToken: "instagram-user-token",
 			HTTPClient: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-				if req.URL.Host == "graph.facebook.com" {
-					username := strings.Split(strings.Split(req.URL.RawQuery, "business_discovery.username(")[1], ")")[0]
-					return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"business_discovery":{"id":"ig-` + username + `","username":"` + username + `"}}`)), Header: make(http.Header)}, nil
+				if req.Method == http.MethodGet && req.URL.Host == "graph.instagram.com" && strings.HasSuffix(req.URL.Path, "/me") {
+					return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"id":"ig-alice","username":"alice"}`)), Header: make(http.Header)}, nil
 				}
 				return transport(req)
 			})},
@@ -183,7 +182,16 @@ func TestInstagramStableIDRoutingIsolationIdempotencyAndSafeIgnores(t *testing.T
 	alice := registerInstagram(t, a, "alice")
 	simulatedDM(t, a, alice.InstagramAccount.InstagramUserID, "stable-alice", "verify-a", alice.VerificationCode, nil)
 
-	b := newTestClientWithHandler(t, a.handler)
+	b := newTestClientWithHandler(t, Handler(a.db, Options{
+		InstagramAccountID: "selected-account", InstagramUsername: "notedesk_inbox", InstagramAccessToken: "instagram-user-token",
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if req.Method == http.MethodGet && strings.HasSuffix(req.URL.Path, "/me") {
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"id":"ig-bob","username":"bob"}`)), Header: make(http.Header)}, nil
+			}
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{}`)), Header: make(http.Header)}, nil
+		})},
+	}))
+	b.db = a.db
 	b.register(t, "Bob", "bob@example.com")
 	bob := registerInstagram(t, b, "bob")
 	simulatedDM(t, a, bob.InstagramAccount.InstagramUserID, "stable-bob", "verify-b", bob.VerificationCode, nil)

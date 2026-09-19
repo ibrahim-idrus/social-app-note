@@ -22,7 +22,7 @@ import (
 
 func (api *API) socialPlatforms(w http.ResponseWriter, _ *http.Request, _ authentication) {
 	writeJSON(w, http.StatusOK, map[string]any{"platforms": []map[string]any{{
-		"id": "instagram", "name": "Instagram", "available": true, "search_enabled": true,
+		"id": "instagram", "name": "Instagram", "available": true, "search_enabled": api.instagramAccessToken != "",
 	}}})
 }
 
@@ -33,24 +33,51 @@ type instagramAccountMatch struct {
 	ProfilePictureURL string `json:"profile_picture_url"`
 }
 
+var errInstagramAuth = errors.New("instagram authentication failed")
+
 func (api *API) discoverInstagramAccount(ctx context.Context, username string) (*instagramAccountMatch, error) {
-	u := fmt.Sprintf("https://graph.facebook.com/v23.0/%s?fields=business_discovery.username(%s){id,username,name,profile_picture_url}&access_token=%s", api.instagramAccountID, username, api.instagramAccessToken)
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	endpoint := fmt.Sprintf("https://graph.instagram.com/%s/me", url.PathEscape(api.instagramGraphVersion))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	query := req.URL.Query()
+	query.Set("fields", "id,username,name,profile_picture_url")
+	req.URL.RawQuery = query.Encode()
+	req.Header.Set("Authorization", "Bearer "+api.instagramAccessToken)
 	res, err := api.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
+		var provider struct {
+			Error struct {
+				Type string `json:"type"`
+				Code int    `json:"code"`
+			} `json:"error"`
+		}
+		if json.NewDecoder(io.LimitReader(res.Body, maxBodyBytes)).Decode(&provider) == nil && (provider.Error.Type == "OAuthException" || provider.Error.Code == 190) {
+			return nil, errInstagramAuth
+		}
 		return nil, errors.New("instagram search failed")
 	}
-	var out struct {
-		BusinessDiscovery *instagramAccountMatch `json:"business_discovery"`
+	var account instagramAccountMatch
+	if err := json.NewDecoder(io.LimitReader(res.Body, maxBodyBytes)).Decode(&account); err != nil {
+		return nil, errors.New("instagram search failed")
 	}
-	if json.NewDecoder(res.Body).Decode(&out) != nil {
+	accountUsername, ok := normalizeInstagramUsername(account.Username)
+	if !ok || accountUsername != username {
 		return nil, nil
 	}
-	return out.BusinessDiscovery, nil
+	return &account, nil
+}
+
+func instagramSearchError(err error) string {
+	if errors.Is(err, errInstagramAuth) {
+		return "instagram_auth_failed"
+	}
+	return "instagram_search_failed"
 }
 
 func (api *API) searchSocialIdentities(w http.ResponseWriter, r *http.Request, _ authentication) {
@@ -59,13 +86,13 @@ func (api *API) searchSocialIdentities(w http.ResponseWriter, r *http.Request, _
 		writeError(w, http.StatusBadRequest, "invalid_query")
 		return
 	}
-	if api.instagramAccountID == "" || api.instagramAccessToken == "" {
+	if api.instagramAccessToken == "" {
 		writeError(w, http.StatusServiceUnavailable, "instagram_search_unavailable")
 		return
 	}
 	account, err := api.discoverInstagramAccount(r.Context(), username)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "instagram_search_failed")
+		writeError(w, http.StatusBadGateway, instagramSearchError(err))
 		return
 	}
 	if account == nil {
@@ -98,16 +125,16 @@ func (api *API) createSocialIdentity(w http.ResponseWriter, r *http.Request, aut
 		writeError(w, http.StatusBadRequest, "invalid_input")
 		return
 	}
-	if api.instagramAccountID == "" || api.instagramAccessToken == "" {
+	if api.instagramAccessToken == "" {
 		writeError(w, http.StatusServiceUnavailable, "instagram_search_unavailable")
 		return
 	}
 	account, err := api.discoverInstagramAccount(r.Context(), username)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "instagram_search_failed")
+		writeError(w, http.StatusBadGateway, instagramSearchError(err))
 		return
 	}
-	if account == nil || account.ID != input.PlatformUserID || account.Username != username {
+	if account == nil || account.ID != input.PlatformUserID {
 		writeError(w, http.StatusConflict, "instagram_account_changed")
 		return
 	}

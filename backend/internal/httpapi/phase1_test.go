@@ -33,11 +33,10 @@ func newTestClient(t *testing.T, secure bool) *testClient {
 	}
 	t.Cleanup(func() { db.Close() })
 	return &testClient{handler: Handler(db, Options{
-		SecureCookies: secure, InstagramAccountID: "selected-account", InstagramAccessToken: "token",
+		SecureCookies: secure, InstagramAccountID: "selected-account", InstagramUsername: "notedesk_inbox", InstagramAccessToken: "token",
 		HTTPClient: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if req.URL.Host == "graph.facebook.com" {
-				username := strings.Split(strings.Split(req.URL.RawQuery, "business_discovery.username(")[1], ")")[0]
-				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"business_discovery":{"id":"ig-` + username + `","username":"` + username + `"}}`)), Header: make(http.Header)}, nil
+			if req.Method == http.MethodGet && req.URL.Host == "graph.instagram.com" && strings.HasSuffix(req.URL.Path, "/me") {
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"id":"ig-alice","username":"alice"}`)), Header: make(http.Header)}, nil
 			}
 			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{}`)), Header: make(http.Header)}, nil
 		})},

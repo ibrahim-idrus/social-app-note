@@ -53,6 +53,22 @@ test('API errors retain status and translate backend error codes', async () => {
 	});
 });
 
+test('Instagram provider failures use specific messages instead of the generic fallback', async () => {
+	for (const [code, message] of [
+		['instagram_auth_failed', 'Instagram account lookup needs a valid access token.'],
+		['instagram_search_failed', 'Instagram account lookup is temporarily unavailable.']
+	] as const) {
+		const api = createApiClient(async () => Response.json({ error: code }, { status: 502 }));
+		await assert.rejects(api.searchSocialIdentities('alice'), (error) => {
+			assert.ok(error instanceof ApiError);
+			assert.equal(error.code, code);
+			assert.equal(error.message, message);
+			assert.notEqual(error.message, 'The request could not be completed.');
+			return true;
+		});
+	}
+});
+
 test('renders basic markdown without allowing raw HTML or unsafe links', () => {
 	const html = renderMarkdown('# Hello\n\n**Bold** and [safe](https://example.com)\n\n<script>alert(1)</script> [bad](javascript:alert(1))');
 	assert.match(html, /<h1>Hello<\/h1>/);
