@@ -10,7 +10,7 @@ export type Note = {
 	updated_at: string;
 };
 export type NotesPage = { notes: Note[]; total: number; page: number; page_size: number };
-export type SocialPlatform = { id: string; name: string; available: boolean; search_enabled: boolean };
+export type SocialPlatform = { id: string; name: string; available: boolean; search_enabled: boolean; inbox?: { instagram_user_id: string; username: string } };
 export type SocialAccountMatch = { id: string; username: string; name: string; profile_picture_url: string };
 export type SocialIdentity = {
 	id: number;
@@ -40,6 +40,7 @@ const messages: Record<string, string> = {
 	csrf_failed: 'Your session changed. Refresh the page and try again.',
 	email_unavailable: 'An account already uses that email address.',
 	identity_unavailable: 'This Instagram identity is unavailable.',
+	dedicated_instagram_account: 'That account is the dedicated receiving inbox. Add the Instagram account that will send notes instead.',
 	platform_identity_already_registered: 'An Instagram identity is already registered.',
 	invalid_credentials: 'Email or password is incorrect.',
 	invalid_input: 'Check the information and try again.',
@@ -101,8 +102,7 @@ export function createApiClient(fetcher: Fetch = fetch, cookies = () => typeof d
 		deleteNote: (id: number) => request<void>(`/api/notes/${id}`, { method: 'DELETE' }),
 		platforms: async () => (await request<{ platforms: SocialPlatform[] }>('/api/social-platforms')).platforms,
 		identities: async () => (await request<{ identities: SocialIdentity[] }>('/api/social-identities')).identities,
-		searchSocialIdentities: async (username: string) => (await request<{ accounts: SocialAccountMatch[] }>(`/api/social-identities/search?username=${encodeURIComponent(username)}`)).accounts,
-		createSocialIdentity: (platform: string, account: SocialAccountMatch) => request<InstagramRegistration>('/api/social-identities', { method: 'POST', body: JSON.stringify({ platform, platform_user_id: account.id, username: account.username }) }),
+		createSocialIdentity: (platform: string, username: string) => request<InstagramRegistration>('/api/social-identities', { method: 'POST', body: JSON.stringify({ platform, username }) }),
 		regenerateSocialIdentityCode: (id: number) => request<InstagramRegistration>(`/api/social-identities/${id}/verification-code`, { method: 'POST' }),
 		deleteSocialIdentity: (id: number) => request<void>(`/api/social-identities/${id}`, { method: 'DELETE' })
 	};

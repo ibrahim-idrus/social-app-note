@@ -49,7 +49,7 @@ func Handler(db *sql.DB, options ...Options) http.Handler {
 	mux.HandleFunc("GET /api/profile", api.authenticated(api.profile, false))
 	mux.HandleFunc("GET /api/social-platforms", api.authenticated(api.socialPlatforms, false))
 	mux.HandleFunc("GET /api/social-identities", api.authenticated(api.listSocialIdentities, false))
-	mux.HandleFunc("GET /api/social-identities/search", api.authenticated(api.searchSocialIdentities, false))
+
 	mux.HandleFunc("POST /api/social-identities", api.authenticated(api.createSocialIdentity, true))
 	mux.HandleFunc("POST /api/social-identities/{id}/verification-code", api.authenticated(api.regenerateSocialIdentityCode, true))
 	mux.HandleFunc("DELETE /api/social-identities/{id}", api.authenticated(api.deleteSocialIdentity, true))

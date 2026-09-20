@@ -58,7 +58,7 @@ type instagramRegistration struct {
 func registerInstagram(t *testing.T, c *testClient, username string) instagramRegistration {
 	t.Helper()
 	res := c.request(t, http.MethodPost, "/api/social-identities", map[string]string{
-		"platform": "instagram", "platform_user_id": "ig-" + strings.ToLower(username), "username": username,
+		"platform": "instagram", "username": username,
 	}, true)
 	if res.Code != http.StatusCreated {
 		t.Fatalf("create identity = %d %s", res.Code, res.Body.String())

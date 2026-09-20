@@ -45,7 +45,7 @@ test('logout is sent without a CSRF dependency so a stale client token cannot ke
 
 test('API errors retain status and translate backend error codes', async () => {
 	const api = createApiClient(async () => Response.json({ error: 'identity_unavailable' }, { status: 409 }));
-	await assert.rejects(api.createSocialIdentity('instagram', { id: 'ig-1', username: 'alice', name: 'Alice', profile_picture_url: '' }), (error) => {
+	await assert.rejects(api.createSocialIdentity('instagram', 'alice'), (error) => {
 		assert.ok(error instanceof ApiError);
 		assert.equal(error.status, 409);
 		assert.equal(error.message, 'This Instagram identity is unavailable.');
@@ -53,21 +53,6 @@ test('API errors retain status and translate backend error codes', async () => {
 	});
 });
 
-test('Instagram provider failures use specific messages instead of the generic fallback', async () => {
-	for (const [code, message] of [
-		['instagram_auth_failed', 'Instagram account lookup needs a valid access token.'],
-		['instagram_search_failed', 'Instagram account lookup is temporarily unavailable.']
-	] as const) {
-		const api = createApiClient(async () => Response.json({ error: code }, { status: 502 }));
-		await assert.rejects(api.searchSocialIdentities('alice'), (error) => {
-			assert.ok(error instanceof ApiError);
-			assert.equal(error.code, code);
-			assert.equal(error.message, message);
-			assert.notEqual(error.message, 'The request could not be completed.');
-			return true;
-		});
-	}
-});
 
 test('renders basic markdown without allowing raw HTML or unsafe links', () => {
 	const html = renderMarkdown('# Hello\n\n**Bold** and [safe](https://example.com)\n\n<script>alert(1)</script> [bad](javascript:alert(1))');
@@ -108,73 +93,22 @@ test('social capture uses an add-platform flow and hides occupied platforms', as
 	assert.doesNotMatch(source, /\(await api\.identities\(\)\)\[0\]/);
 });
 
-test('Instagram registration returns the one-time code and sends regeneration with CSRF', async () => {
+test('Instagram sender registration posts a username without treating the inbox as a user', async () => {
 	const requests: Request[] = [];
-	const response = {
-		id: 4, platform: 'instagram', platform_user_id: null, username: 'alice', normalized_username: 'alice',
-		display_name: null, avatar_url: null, status: 'pending', verified_at: null, created_at: '', updated_at: '',
-		verification_code: 'ABC123', verification_expires_at: '2026-09-17T12:10:00Z',
-		instagram_account: { instagram_user_id: 'prototype-inbox', username: 'notedesk_inbox' }
-	};
-	const api = createApiClient(async (input, init) => {
-		requests.push(new Request(input, init));
-		return Response.json(response, { status: requests.length === 1 ? 201 : 200 });
-	}, () => 'csrf_token=token');
-
-	const created = await api.createSocialIdentity('instagram', { id: 'ig-1', username: 'alice', name: 'Alice', profile_picture_url: '' });
-	const regenerated = await api.regenerateSocialIdentityCode(4);
-	assert.equal(created.verification_code, 'ABC123');
-	assert.equal(regenerated.instagram_account.username, 'notedesk_inbox');
-	assert.deepEqual(await requests[0].json(), { platform: 'instagram', platform_user_id: 'ig-1', username: 'alice' });
-	assert.equal(requests[1].url, 'http://localhost/api/social-identities/4/verification-code');
-	assert.equal(requests[1].headers.get('x-csrf-token'), 'token');
+	const response = { id: 4, platform: 'instagram', platform_user_id: null, username: 'alice', normalized_username: 'alice', display_name: null, avatar_url: null, status: 'pending', verified_at: null, created_at: '', updated_at: '', verification_code: 'ABC123', verification_expires_at: '2026-09-17T12:10:00Z', instagram_account: { instagram_user_id: 'prototype-inbox', username: 'notedesk_inbox' } };
+	const client = createApiClient(async (input, init) => { requests.push(new Request(input, init)); return Response.json(response, { status: 201 }); }, () => 'csrf_token=token');
+	await client.createSocialIdentity('instagram', 'alice');
+	assert.deepEqual(await requests[0].json(), { platform: 'instagram', username: 'alice' });
 });
 
-test('Instagram connect requires confirming the exact discovery result', async () => {
+test('settings separates the dedicated receiving inbox from sender registration', async () => {
 	const source = await (await import('node:fs/promises')).readFile('src/routes/settings/+page.svelte', 'utf8');
-	assert.match(source, /Is this your account\?/);
-	assert.match(source, /Yes, connect this account/);
-	assert.match(source, /No, search again/);
-	assert.match(source, /instagram\.com\/\$\{match\.username\}/);
-	assert.match(source, /match\.profile_picture_url/);
-	assert.match(source, /match\.name/);
-	assert.match(source, /@\{match\.username\}/);
-	assert.doesNotMatch(source, /Add exact username/);
-});
-
-test('Instagram search reports pending, empty, and failed outcomes without stale results or duplicate requests', async () => {
-	const source = await (await import('node:fs/promises')).readFile('src/routes/settings/+page.svelte', 'utf8');
-	assert.match(source, /let searching = \$state\(false\)/);
-	assert.match(source, /let searchCompleted = \$state\(false\)/);
-	assert.match(source, /if \(searching\) return/);
-	assert.match(source, /const query = username\.trim\(\)/);
-	assert.match(source, /searching = true[^]*await api\.searchSocialIdentities\(query\)[^]*searchCompleted = true[^]*finally \{ searching = false; \}/);
-	assert.match(source, /if \(!selectedPlatform \|\| username\.trim\(\) !== query\) return/);
-	assert.match(source, /disabled=\{searching \|\| !username\.trim\(\)\}/);
-	assert.match(source, /\{searching \? 'Searching…' : 'Search'\}/);
-	assert.match(source, /role="status"[^>]*aria-live="polite"[^>]*>Searching…</);
-	assert.match(source, /searchCompleted && !searching && !error && matches\.length === 0/);
-	assert.match(source, /No matching connected Instagram account was found\. Verify the username matches the account connected to this app\./);
-	assert.match(source, /\{#if error\}<div class="notice error" role="alert">\{error\}<\/div>\{\/if\}/);
-	assert.match(source, /function clearSearchResult\(\)[^]*matches = \[\][^]*searchCompleted = false/);
-	assert.match(source, /oninput=\{clearSearchResult\}/);
-	assert.match(source, /Cancel adding platform[^]*clearSearchResult\(\)/);
-	const searchBody = source.match(/async function search\(\) \{[^]*?\n\t\}/)?.[0] ?? '';
-	assert.match(searchBody, /clearSearchResult\(\)/);
-	assert.match(searchBody, /catch \(cause\)[^]*error = cause instanceof Error/);
-	assert.doesNotMatch(searchBody.match(/catch \(cause\)[^]*/)?.[0] ?? '', /searchCompleted = true/);
-});
-
-test('settings explains the dedicated Instagram inbox and keeps pending reload guidance', async () => {
-	const source = await (await import('node:fs/promises')).readFile('src/routes/settings/+page.svelte', 'utf8');
-	assert.match(source, /verification_code/);
-	assert.match(source, /instagram_account.*username/s);
+	assert.match(source, /Dedicated receiving inbox/);
+	assert.match(source, /It is not a user account/);
+	assert.match(source, /Connect sender account/);
+	assert.doesNotMatch(source, /searchSocialIdentities|Is this your account\?|Yes, connect this account|Searching…/);
 	assert.match(source, /DM this code/i);
 	assert.match(source, /10 minutes/i);
-	assert.match(source, /Regenerate code/i);
-	assert.match(source, /pending/i);
-	assert.doesNotMatch(source, /notedesk_inbox/);
-	assert.match(source, /searchSocialIdentities/);
 });
 
 test('Instagram verification UI waits for backend state and cleans up bounded polling', async () => {

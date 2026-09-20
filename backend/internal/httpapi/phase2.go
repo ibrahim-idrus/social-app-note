@@ -21,8 +21,9 @@ import (
 )
 
 func (api *API) socialPlatforms(w http.ResponseWriter, _ *http.Request, _ authentication) {
+	inbox, _ := store.GetInstagramIntegration(context.Background(), api.db)
 	writeJSON(w, http.StatusOK, map[string]any{"platforms": []map[string]any{{
-		"id": "instagram", "name": "Instagram", "available": true, "search_enabled": api.instagramAccessToken != "",
+		"id": "instagram", "name": "Instagram", "available": true, "search_enabled": false, "inbox": inbox,
 	}}})
 }
 
@@ -121,21 +122,13 @@ func (api *API) createSocialIdentity(w http.ResponseWriter, r *http.Request, aut
 		return
 	}
 	username, ok := normalizeInstagramUsername(input.Username)
-	if input.Platform != "instagram" || input.PlatformUserID == "" || len(input.PlatformUserID) > 128 || !ok {
+	if input.Platform != "instagram" || input.PlatformUserID != "" || !ok {
 		writeError(w, http.StatusBadRequest, "invalid_input")
 		return
 	}
-	if api.instagramAccessToken == "" {
-		writeError(w, http.StatusServiceUnavailable, "instagram_search_unavailable")
-		return
-	}
-	account, err := api.discoverInstagramAccount(r.Context(), username)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, instagramSearchError(err))
-		return
-	}
-	if account == nil || account.ID != input.PlatformUserID {
-		writeError(w, http.StatusConflict, "instagram_account_changed")
+	inbox, err := store.GetInstagramIntegration(r.Context(), api.db)
+	if err == nil && strings.EqualFold(username, inbox.Username) {
+		writeError(w, http.StatusConflict, "dedicated_instagram_account")
 		return
 	}
 	code, codeHash, expiresAt, err := newInstagramVerification()
@@ -143,7 +136,7 @@ func (api *API) createSocialIdentity(w http.ResponseWriter, r *http.Request, aut
 		writeError(w, http.StatusInternalServerError, "internal_error")
 		return
 	}
-	identity, err := store.CreatePendingSocialIdentity(r.Context(), api.db, auth.ID, input.Platform, account.ID, username, account.Name, account.ProfilePictureURL, codeHash, expiresAt)
+	identity, err := store.CreatePendingSocialIdentity(r.Context(), api.db, auth.ID, input.Platform, "", username, "", "", codeHash, expiresAt)
 	if errors.Is(err, store.ErrPlatformIdentityAlreadyRegistered) {
 		writeError(w, http.StatusConflict, "platform_identity_already_registered")
 		return

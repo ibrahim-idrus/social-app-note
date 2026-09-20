@@ -93,6 +93,10 @@ func ListSocialIdentities(ctx context.Context, db *sql.DB, userID int64) ([]Soci
 }
 
 func CreatePendingSocialIdentity(ctx context.Context, db *sql.DB, userID int64, platform, platformUserID, username, displayName, avatarURL string, codeHash []byte, expiresAt string) (SocialIdentity, error) {
+	var stableID any
+	if platformUserID != "" {
+		stableID = platformUserID
+	}
 	var occupied bool
 	if err := db.QueryRowContext(ctx, `SELECT EXISTS(
 		SELECT 1 FROM social_identities WHERE user_id = ? AND platform = ?
@@ -106,7 +110,7 @@ func CreatePendingSocialIdentity(ctx context.Context, db *sql.DB, userID int64, 
 		INSERT INTO social_identities (
 			user_id, platform, platform_user_id, username, normalized_username, display_name, avatar_url, status,
 			verification_code_hash, verification_expires_at, verification_result, verification_result_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, 'waiting', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`, userID, platform, platformUserID, username, username, displayName, avatarURL, codeHash, expiresAt)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, 'waiting', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`, userID, platform, stableID, username, username, displayName, avatarURL, codeHash, expiresAt)
 	if err != nil {
 		message := err.Error()
 		if strings.Contains(message, "social_identities.user_id, social_identities.platform") {
@@ -178,7 +182,7 @@ func socialIdentityByID(ctx context.Context, db *sql.DB, userID, id int64) (Soci
 	return identity, err
 }
 
-func instagramIntegration(ctx context.Context, db *sql.DB) (InstagramIntegration, error) {
+func GetInstagramIntegration(ctx context.Context, db *sql.DB) (InstagramIntegration, error) {
 	var integration InstagramIntegration
 	err := db.QueryRowContext(ctx, `
 		SELECT id, instagram_user_id, username, access_token, status, created_at, updated_at
@@ -187,6 +191,10 @@ func instagramIntegration(ctx context.Context, db *sql.DB) (InstagramIntegration
 		&integration.Status, &integration.CreatedAt, &integration.UpdatedAt,
 	)
 	return integration, err
+}
+
+func instagramIntegration(ctx context.Context, db *sql.DB) (InstagramIntegration, error) {
+	return GetInstagramIntegration(ctx, db)
 }
 
 func ConfigureInstagramIntegration(ctx context.Context, db *sql.DB, accountID, username, accessToken string) error {
