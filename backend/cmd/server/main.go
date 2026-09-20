@@ -35,8 +35,12 @@ func main() {
 	defer db.Close()
 
 	server := &http.Server{
-		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.Handler(db, httpapi.Options{SecureCookies: cfg.SessionCookieSecure, InstagramAccountID: cfg.InstagramDedicatedAccountID, InstagramUsername: cfg.InstagramDedicatedUsername, InstagramAccessToken: cfg.InstagramAccessToken}),
+		Addr: cfg.HTTPAddr,
+		Handler: httpapi.Handler(db, httpapi.Options{
+			SecureCookies: cfg.SessionCookieSecure, InstagramAccountID: cfg.InstagramDedicatedAccountID, InstagramUsername: cfg.InstagramDedicatedUsername, InstagramAccessToken: cfg.InstagramAccessToken,
+			InstagramUser1AccountID: cfg.InstagramUser1AccountID, InstagramAccessUser1Token: cfg.InstagramAccessUser1Token,
+			InstagramUser2AccountID: cfg.InstagramUser2AccountID, InstagramAccessUser2Token: cfg.InstagramAccessUser2Token,
+		}),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {

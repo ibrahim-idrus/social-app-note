@@ -36,6 +36,19 @@ type instagramAccountMatch struct {
 
 var errInstagramAuth = errors.New("instagram authentication failed")
 
+type instagramSender struct {
+	accountID, accessToken string
+}
+
+func (api *API) verificationSender() (instagramSender, bool) {
+	for _, sender := range api.instagramSenders {
+		if sender.accountID != "" && sender.accessToken != "" && sender.accountID != api.instagramAccountID {
+			return sender, true
+		}
+	}
+	return instagramSender{}, false
+}
+
 func (api *API) discoverInstagramAccount(ctx context.Context, username string) (*instagramAccountMatch, error) {
 	endpoint := fmt.Sprintf("https://graph.instagram.com/%s/me", url.PathEscape(api.instagramGraphVersion))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
@@ -150,6 +163,14 @@ func (api *API) createSocialIdentity(w http.ResponseWriter, r *http.Request, aut
 		return
 	}
 	identity.VerificationCode = code
+	// Automatic delivery is optional until a distinct user sender is configured.
+	if sender, ok := api.verificationSender(); ok {
+		if err := api.sendInstagramTextFrom(r.Context(), sender, api.instagramAccountID, code); err != nil {
+			_ = store.DeleteSocialIdentity(r.Context(), api.db, auth.ID, identity.ID)
+			writeError(w, http.StatusBadGateway, "instagram_send_failed")
+			return
+		}
+	}
 	writeJSON(w, http.StatusCreated, identity)
 }
 
@@ -163,6 +184,12 @@ func (api *API) regenerateSocialIdentityCode(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error")
 		return
+	}
+	if sender, ok := api.verificationSender(); ok {
+		if err := api.sendInstagramTextFrom(r.Context(), sender, api.instagramAccountID, code); err != nil {
+			writeError(w, http.StatusBadGateway, "instagram_send_failed")
+			return
+		}
 	}
 	identity, err := store.ReplaceSocialIdentityVerification(r.Context(), api.db, auth.ID, id, codeHash, expiresAt)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -217,7 +244,11 @@ func (api *API) simulatedInstagramDM(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) sendInstagramText(ctx context.Context, recipientID, text string) error {
-	if api.instagramAccountID == "" || api.instagramAccessToken == "" {
+	return api.sendInstagramTextFrom(ctx, instagramSender{api.instagramAccountID, api.instagramAccessToken}, recipientID, text)
+}
+
+func (api *API) sendInstagramTextFrom(ctx context.Context, sender instagramSender, recipientID, text string) error {
+	if sender.accountID == "" || sender.accessToken == "" || recipientID == "" {
 		return errors.New("instagram messaging is not configured")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -229,12 +260,12 @@ func (api *API) sendInstagramText(ctx context.Context, recipientID, text string)
 	if err != nil {
 		return err
 	}
-	endpoint := fmt.Sprintf("https://graph.instagram.com/%s/%s/messages", url.PathEscape(api.instagramGraphVersion), url.PathEscape(api.instagramAccountID))
+	endpoint := fmt.Sprintf("https://graph.instagram.com/%s/%s/messages", url.PathEscape(api.instagramGraphVersion), url.PathEscape(sender.accountID))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+api.instagramAccessToken)
+	req.Header.Set("Authorization", "Bearer "+sender.accessToken)
 	req.Header.Set("Content-Type", "application/json")
 	res, err := api.httpClient.Do(req)
 	if err != nil {

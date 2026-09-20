@@ -36,6 +36,7 @@ type API struct {
 	secureCookies                                                   bool
 	limiter                                                         *loginLimiter
 	instagramAccountID, instagramAccessToken, instagramGraphVersion string
+	instagramSenders                                                []instagramSender
 	productName                                                     string
 	httpClient                                                      *http.Client
 }

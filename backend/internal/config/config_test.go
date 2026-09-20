@@ -34,7 +34,7 @@ func TestLoad(t *testing.T) {
 				"DATABASE_PATH=sqlite.db\n" +
 				"SESSION_COOKIE_SECURE=false\n" +
 				"INSTAGRAM_ENABLED=false\n" +
-				"INSTAGRAM_APP_ID=app\nINSTAGRAM_APP_SECRET=secret\nINSTAGRAM_DEDICATED_ACCOUNT_ID=17841426326903892\nINSTAGRAM_DEDICATED_USERNAME=akun_testing911\nINSTAGRAM_WEBHOOK_VERIFY_TOKEN=verify\nINSTAGRAM_ACCESS_TOKEN=token\n",
+				"INSTAGRAM_APP_ID=app\nINSTAGRAM_APP_SECRET=secret\nINSTAGRAM_DEDICATED_ACCOUNT_ID=17841426326903892\nINSTAGRAM_DEDICATED_USERNAME=akun_testing911\nINSTAGRAM_WEBHOOK_VERIFY_TOKEN=verify\nINSTAGRAM_ACCESS_TOKEN=token\nINSTAGRAM_USER1_ACCOUNT_ID=user-1\nINSTAGRAM_ACCESS_USER1_TOKEN=user-token-1\nINSTAGRAM_USER2_ACCOUNT_ID=user-2\nINSTAGRAM_ACCESS_USER2_TOKEN=user-token-2\n",
 		},
 		{
 			name: "HTTPS cookies",
@@ -89,6 +89,9 @@ func TestLoad(t *testing.T) {
 			}
 			if tt.name == "valid" && (got.InstagramDedicatedAccountID != "17841426326903892" || got.InstagramDedicatedUsername != "akun_testing911" || got.InstagramAccessToken != "token") {
 				t.Fatalf("Instagram config = %#v", got)
+			}
+			if tt.name == "valid" && (got.InstagramUser1AccountID != "user-1" || got.InstagramAccessUser1Token != "user-token-1" || got.InstagramUser2AccountID != "user-2" || got.InstagramAccessUser2Token != "user-token-2") {
+				t.Fatalf("Instagram sender config = %#v", got)
 			}
 		})
 	}
