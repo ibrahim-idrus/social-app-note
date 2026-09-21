@@ -104,6 +104,33 @@ func TestInstagramWebhookSavesUnmatchedTextToInboxOwner(t *testing.T) {
 	}
 }
 
+func TestInstagramWebhookIgnoresEventsOutsideConfiguredInbox(t *testing.T) {
+	_, c := webhookHandler(t, "verify", "app-secret")
+	c.register(t, "Inbox Owner", "owner@example.com")
+	if _, err := c.db.Exec(`UPDATE instagram_integrations SET owner_user_id=(SELECT id FROM users WHERE email='owner@example.com') WHERE instagram_user_id='inbox'`); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, payload := range []string{
+		`{"object":"instagram","entry":[{"id":"other-account","messaging":[{"sender":{"id":"sender-1"},"recipient":{"id":"inbox"},"message":{"mid":"wrong-entry","text":"ignore"}}]}]}`,
+		`{"object":"instagram","entry":[{"id":"inbox","messaging":[{"sender":{"id":"sender-1"},"recipient":{"id":"other-account"},"message":{"mid":"wrong-recipient","text":"ignore"}}]}]}`,
+		`{"object":"page","entry":[{"id":"inbox","messaging":[{"sender":{"id":"sender-1"},"recipient":{"id":"inbox"},"message":{"mid":"wrong-object","text":"ignore"}}]}]}`,
+	} {
+		r := httptest.NewRequest(http.MethodPost, "/api/integrations/instagram/webhook", strings.NewReader(payload))
+		r.Header.Set("X-Hub-Signature-256", signWebhook("app-secret", []byte(payload)))
+		w := httptest.NewRecorder()
+		c.handler.ServeHTTP(w, r)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%q", w.Code, w.Body.String())
+		}
+	}
+
+	var notes int
+	if err := c.db.QueryRow(`SELECT count(*) FROM notes`).Scan(&notes); err != nil || notes != 0 {
+		t.Fatalf("notes=%d err=%v", notes, err)
+	}
+}
+
 func TestInstagramWebhookProcessesSignedTextAndIgnoresEcho(t *testing.T) {
 	h, c := webhookHandler(t, "verify", "app-secret")
 	c.register(t, "Alice", "alice@example.com")

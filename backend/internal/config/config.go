@@ -23,6 +23,8 @@ type Config struct {
 	InstagramUser2AccountID, InstagramAccessUser2Token      string
 }
 
+const instagramPermissions = "instagram_business_basic,instagram_business_manage_messages"
+
 var supported = map[string]bool{
 	"HTTP_ADDR":             true,
 	"DATABASE_PATH":         true,
@@ -31,6 +33,7 @@ var supported = map[string]bool{
 	"INSTAGRAM_APP_ID":      true, "INSTAGRAM_APP_SECRET": true,
 	"INSTAGRAM_DEDICATED_ACCOUNT_ID": true, "INSTAGRAM_DEDICATED_USERNAME": true,
 	"INSTAGRAM_WEBHOOK_VERIFY_TOKEN": true, "INSTAGRAM_ACCESS_TOKEN": true,
+	"INSTAGRAM_PERMISSIONS":      true,
 	"INSTAGRAM_USER1_ACCOUNT_ID": true, "INSTAGRAM_ACCESS_USER1_TOKEN": true,
 	"INSTAGRAM_USER2_ACCOUNT_ID": true, "INSTAGRAM_ACCESS_USER2_TOKEN": true,
 	"INSTAGRAM_INBOX_OWNER_EMAIL": true, "INSTAGRAM_POLL_INTERVAL_SECONDS": true,
@@ -101,6 +104,31 @@ func Load(path string) (Config, error) {
 		return Config{}, fmt.Errorf("SESSION_COOKIE_SECURE must be true or false")
 	}
 	secureCookies := values["SESSION_COOKIE_SECURE"] == "true"
+
+	instagramKeys := []string{
+		"INSTAGRAM_APP_ID", "INSTAGRAM_APP_SECRET", "INSTAGRAM_DEDICATED_ACCOUNT_ID", "INSTAGRAM_DEDICATED_USERNAME",
+		"INSTAGRAM_WEBHOOK_VERIFY_TOKEN", "INSTAGRAM_ACCESS_TOKEN", "INSTAGRAM_INBOX_OWNER_EMAIL",
+		"INSTAGRAM_USER1_ACCOUNT_ID", "INSTAGRAM_ACCESS_USER1_TOKEN", "INSTAGRAM_USER2_ACCOUNT_ID", "INSTAGRAM_ACCESS_USER2_TOKEN",
+	}
+	instagramConfigured := false
+	for _, key := range instagramKeys {
+		instagramConfigured = instagramConfigured || values[key] != ""
+	}
+	if instagramConfigured && values["INSTAGRAM_PERMISSIONS"] != instagramPermissions {
+		return Config{}, fmt.Errorf("INSTAGRAM_PERMISSIONS must be %s", instagramPermissions)
+	}
+	if instagramConfigured {
+		for _, key := range []string{"INSTAGRAM_APP_ID", "INSTAGRAM_APP_SECRET", "INSTAGRAM_DEDICATED_ACCOUNT_ID", "INSTAGRAM_DEDICATED_USERNAME", "INSTAGRAM_WEBHOOK_VERIFY_TOKEN", "INSTAGRAM_ACCESS_TOKEN", "INSTAGRAM_INBOX_OWNER_EMAIL"} {
+			if values[key] == "" {
+				return Config{}, fmt.Errorf("%s is required when Instagram is configured", key)
+			}
+		}
+	}
+	for _, pair := range [][2]string{{"INSTAGRAM_USER1_ACCOUNT_ID", "INSTAGRAM_ACCESS_USER1_TOKEN"}, {"INSTAGRAM_USER2_ACCOUNT_ID", "INSTAGRAM_ACCESS_USER2_TOKEN"}} {
+		if (values[pair[0]] == "") != (values[pair[1]] == "") {
+			return Config{}, fmt.Errorf("%s and %s must be configured together", pair[0], pair[1])
+		}
+	}
 
 	pollInterval := 60
 	if raw := values["INSTAGRAM_POLL_INTERVAL_SECONDS"]; raw != "" {

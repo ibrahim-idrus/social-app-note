@@ -26,13 +26,16 @@ func (api *API) instagramWebhookVerify(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) processInstagramText(ctx context.Context, recipient, sender, messageID, text string, fallback bool) error {
+	if fallback {
+		recipient = api.instagramAccountID
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	outcome, err := store.ProcessInstagramDM(ctx, api.db, recipient, sender, messageID, text, now)
 	if err != nil {
 		return err
 	}
 	if outcome.Kind == store.InstagramDMUnmatched && fallback {
-		ownerID, err := store.InstagramIntegrationOwnerID(ctx, api.db, recipient)
+		ownerID, err := store.InstagramIntegrationOwnerID(ctx, api.db, api.instagramAccountID)
 		if err != nil {
 			return err
 		}
@@ -65,7 +68,9 @@ func (api *API) instagramWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var payload struct {
-		Entry []struct {
+		Object string `json:"object"`
+		Entry  []struct {
+			ID        string `json:"id"`
 			Messaging []struct {
 				Sender struct {
 					ID string `json:"id"`
@@ -85,12 +90,19 @@ func (api *API) instagramWebhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_input")
 		return
 	}
+	if payload.Object != "instagram" || api.instagramAccountID == "" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 	for _, entry := range payload.Entry {
+		if entry.ID != api.instagramAccountID {
+			continue
+		}
 		for _, event := range entry.Messaging {
-			if event.Message.IsEcho || event.Message.Text == "" || event.Message.MID == "" || event.Sender.ID == "" || event.Recipient.ID == "" || event.Sender.ID == api.instagramAccountID {
+			if event.Message.IsEcho || event.Message.Text == "" || event.Message.MID == "" || event.Sender.ID == "" || event.Recipient.ID != api.instagramAccountID || event.Sender.ID == api.instagramAccountID {
 				continue
 			}
-			if err := api.processInstagramText(r.Context(), event.Recipient.ID, event.Sender.ID, event.Message.MID, event.Message.Text, true); err != nil {
+			if err := api.processInstagramText(r.Context(), api.instagramAccountID, event.Sender.ID, event.Message.MID, event.Message.Text, true); err != nil {
 				writeError(w, http.StatusInternalServerError, "internal_error")
 				return
 			}
