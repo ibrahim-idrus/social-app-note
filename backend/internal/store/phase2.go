@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"errors"
+	"log"
 	"strings"
 	"time"
 )
@@ -238,8 +239,10 @@ func ProcessInstagramDM(ctx context.Context, db *sql.DB, recipientID, senderID, 
 		return InstagramDMOutcome{}, err
 	}
 	if !recipientExists {
+		log.Printf("instagram dm integration unmatched recipientID=%q", recipientID)
 		return commitInstagramDMOutcome(tx, InstagramDMOutcome{Kind: InstagramDMUnmatched})
 	}
+	log.Printf("instagram dm integration matched recipientID=%q status=active", recipientID)
 
 	codeHash := sha256.Sum256([]byte(text))
 	var identityID, userID int64
@@ -268,6 +271,8 @@ func ProcessInstagramDM(ctx context.Context, db *sql.DB, recipientID, senderID, 
 		kind := InstagramDMNoteCreated
 		if count == 0 {
 			kind = InstagramDMDuplicate
+		} else {
+			log.Printf("instagram dm note inserted recipientID=%q externalMessageID=%q socialIdentityID=%d", recipientID, externalMessageID, identityID)
 		}
 		return commitInstagramDMOutcome(tx, InstagramDMOutcome{Kind: kind, IdentityID: identityID})
 	}
@@ -362,6 +367,9 @@ func SaveInstagramInboxNote(ctx context.Context, db *sql.DB, ownerID int64, send
 	count, err := result.RowsAffected()
 	if err != nil {
 		return false, err
+	}
+	if count == 1 {
+		log.Printf("instagram inbox note inserted externalMessageID=%q ownerID=%d", messageID, ownerID)
 	}
 	return count == 1, nil
 }

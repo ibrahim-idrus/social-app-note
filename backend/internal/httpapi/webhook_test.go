@@ -112,8 +112,7 @@ func TestInstagramWebhookIgnoresEventsOutsideConfiguredInbox(t *testing.T) {
 	}
 
 	for _, payload := range []string{
-		`{"object":"instagram","entry":[{"id":"other-account","messaging":[{"sender":{"id":"sender-1"},"recipient":{"id":"inbox"},"message":{"mid":"wrong-entry","text":"ignore"}}]}]}`,
-		`{"object":"instagram","entry":[{"id":"inbox","messaging":[{"sender":{"id":"sender-1"},"recipient":{"id":"other-account"},"message":{"mid":"wrong-recipient","text":"ignore"}}]}]}`,
+		`{"object":"instagram","entry":[{"id":"other-account","messaging":[{"sender":{"id":"sender-1"},"recipient":{"id":"other-account"},"message":{"mid":"wrong-recipient","text":"ignore"}}]}]}`,
 		`{"object":"page","entry":[{"id":"inbox","messaging":[{"sender":{"id":"sender-1"},"recipient":{"id":"inbox"},"message":{"mid":"wrong-object","text":"ignore"}}]}]}`,
 	} {
 		r := httptest.NewRequest(http.MethodPost, "/api/integrations/instagram/webhook", strings.NewReader(payload))
@@ -128,6 +127,23 @@ func TestInstagramWebhookIgnoresEventsOutsideConfiguredInbox(t *testing.T) {
 	var notes int
 	if err := c.db.QueryRow(`SELECT count(*) FROM notes`).Scan(&notes); err != nil || notes != 0 {
 		t.Fatalf("notes=%d err=%v", notes, err)
+	}
+}
+
+func TestInstagramWebhookPassesWebhookRecipientToIntegrationLookup(t *testing.T) {
+	_, c := webhookHandler(t, "verify", "app-secret")
+	c.register(t, "Inbox Owner", "owner@example.com")
+	if _, err := c.db.Exec(`UPDATE instagram_integrations SET instagram_user_id='17841426326903892', owner_user_id=(SELECT id FROM users WHERE email='owner@example.com')`); err != nil {
+		t.Fatal(err)
+	}
+	payload := `{"object":"instagram","entry":[{"id":"entry-id-can-differ","messaging":[{"sender":{"id":"sender-1"},"recipient":{"id":"17841426326903892"},"message":{"mid":"real-recipient","text":"save me"}}]}]}`
+	r := httptest.NewRequest(http.MethodPost, "/api/integrations/instagram/webhook", strings.NewReader(payload))
+	r.Header.Set("X-Hub-Signature-256", signWebhook("app-secret", []byte(payload)))
+	w := httptest.NewRecorder()
+	c.handler.ServeHTTP(w, r)
+	var externalID string
+	if err := c.db.QueryRow(`SELECT external_message_id FROM notes`).Scan(&externalID); w.Code != http.StatusOK || err != nil || externalID != "real-recipient" {
+		t.Fatalf("status=%d external=%q err=%v", w.Code, externalID, err)
 	}
 }
 
