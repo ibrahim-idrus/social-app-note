@@ -31,6 +31,14 @@ func (api *API) processInstagramText(ctx context.Context, recipient, sender, mes
 	if err != nil {
 		return err
 	}
+	if outcome.Kind == store.InstagramDMUnmatched && api.inboxOwnerEmail != "" {
+		owner, err := store.UserByEmail(ctx, api.db, api.inboxOwnerEmail)
+		if err != nil {
+			return err
+		}
+		_, err = store.SaveInstagramInboxNote(ctx, api.db, owner.ID, sender, messageID, text)
+		return err
+	}
 	if !outcome.OwnsReply {
 		return nil
 	}

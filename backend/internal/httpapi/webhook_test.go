@@ -85,6 +85,22 @@ func TestInstagramWebhookSignatureAndPayloadValidation(t *testing.T) {
 	}
 }
 
+func TestInstagramWebhookSavesUnmatchedTextToInboxOwner(t *testing.T) {
+	_, c := webhookHandler(t, "verify", "app-secret")
+	c.register(t, "Inbox Owner", "owner@example.com")
+	c.handler = Handler(c.db, Options{InstagramAccountID: "inbox", InstagramUsername: "akun_testing911", InstagramAccessToken: "token", InboxOwnerEmail: "owner@example.com", InstagramWebhookVerifyToken: "verify", InstagramAppSecret: "app-secret"})
+	payload := `{"object":"instagram","entry":[{"id":"inbox","messaging":[{"sender":{"id":"sender-1"},"recipient":{"id":"inbox"},"message":{"mid":"mid-unmatched","text":"instagram e2e"}}]}]}`
+	r := httptest.NewRequest(http.MethodPost, "/api/integrations/instagram/webhook", strings.NewReader(payload))
+	r.Header.Set("X-Hub-Signature-256", signWebhook("app-secret", []byte(payload)))
+	w := httptest.NewRecorder()
+	c.handler.ServeHTTP(w, r)
+	var source, externalID, content string
+	err := c.db.QueryRow(`SELECT source, external_message_id, content_markdown FROM notes`).Scan(&source, &externalID, &content)
+	if w.Code != http.StatusOK || err != nil || source != "instagram" || externalID != "mid-unmatched" || content != "instagram e2e" {
+		t.Fatalf("status=%d source=%q external=%q content=%q err=%v", w.Code, source, externalID, content, err)
+	}
+}
+
 func TestInstagramWebhookProcessesSignedTextAndIgnoresEcho(t *testing.T) {
 	h, c := webhookHandler(t, "verify", "app-secret")
 	c.register(t, "Alice", "alice@example.com")
