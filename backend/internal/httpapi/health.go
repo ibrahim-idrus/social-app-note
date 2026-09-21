@@ -15,6 +15,7 @@ type Options struct {
 	InstagramUser1AccountID, InstagramAccessUser1Token          string
 	InstagramUser2AccountID, InstagramAccessUser2Token          string
 	InboxOwnerEmail                                             string
+	InstagramWebhookVerifyToken, InstagramAppSecret             string
 	InstagramGraphVersion, ProductName                          string
 	HTTPClient                                                  *http.Client
 }
@@ -34,7 +35,7 @@ func Handler(db *sql.DB, options ...Options) http.Handler {
 	if option.ProductName == "" {
 		option.ProductName = "NoteDesk"
 	}
-	api := &API{db: db, secureCookies: option.SecureCookies, limiter: newLoginLimiter(), instagramAccountID: option.InstagramAccountID, instagramAccessToken: option.InstagramAccessToken, instagramGraphVersion: option.InstagramGraphVersion, productName: option.ProductName, httpClient: client, instagramSenders: []instagramSender{{option.InstagramUser1AccountID, option.InstagramAccessUser1Token}, {option.InstagramUser2AccountID, option.InstagramAccessUser2Token}}, inboxOwnerEmail: option.InboxOwnerEmail}
+	api := &API{db: db, secureCookies: option.SecureCookies, limiter: newLoginLimiter(), instagramAccountID: option.InstagramAccountID, instagramAccessToken: option.InstagramAccessToken, instagramGraphVersion: option.InstagramGraphVersion, productName: option.ProductName, httpClient: client, instagramSenders: []instagramSender{{option.InstagramUser1AccountID, option.InstagramAccessUser1Token}, {option.InstagramUser2AccountID, option.InstagramAccessUser2Token}}, inboxOwnerEmail: option.InboxOwnerEmail, instagramWebhookVerifyToken: option.InstagramWebhookVerifyToken, instagramAppSecret: option.InstagramAppSecret}
 	_ = store.ConfigureInstagramIntegration(context.Background(), db, option.InstagramAccountID, option.InstagramUsername, option.InstagramAccessToken)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
@@ -57,6 +58,8 @@ func Handler(db *sql.DB, options ...Options) http.Handler {
 	mux.HandleFunc("POST /api/social-identities/{id}/verification-code", api.authenticated(api.regenerateSocialIdentityCode, true))
 	mux.HandleFunc("DELETE /api/social-identities/{id}", api.authenticated(api.deleteSocialIdentity, true))
 	mux.HandleFunc("POST /api/integrations/instagram/simulated-dm", api.simulatedInstagramDM)
+	mux.HandleFunc("GET /api/integrations/instagram/webhook", api.instagramWebhookVerify)
+	mux.HandleFunc("POST /api/integrations/instagram/webhook", api.instagramWebhook)
 	mux.HandleFunc("GET /api/notes", api.authenticated(api.listNotes, false))
 	mux.HandleFunc("POST /api/notes", api.authenticated(api.createNote, true))
 	mux.HandleFunc("GET /api/notes/{id}", api.authenticated(api.getNote, false))

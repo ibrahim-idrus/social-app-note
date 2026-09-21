@@ -226,18 +226,9 @@ func (api *API) simulatedInstagramDM(w http.ResponseWriter, r *http.Request) {
 		input.MessageType = "text"
 	}
 	if !input.IsSelf && input.MessageType == "text" && input.Text != "" {
-		now := time.Now().UTC().Format(time.RFC3339Nano)
-		outcome, err := store.ProcessInstagramDM(r.Context(), api.db, input.RecipientInstagramUserID, input.SenderPlatformUserID, input.ExternalMessageID, input.Text, now)
-		if err != nil {
+		if err := api.processInstagramText(r.Context(), input.RecipientInstagramUserID, input.SenderPlatformUserID, input.ExternalMessageID, input.Text); err != nil {
 			writeError(w, http.StatusInternalServerError, "internal_error")
 			return
-		}
-		if outcome.OwnsReply {
-			sent := api.sendInstagramText(r.Context(), input.SenderPlatformUserID, fmt.Sprintf("Your @%s Instagram account is connected to %s.", outcome.Username, api.productName)) == nil
-			if err := store.RecordInstagramVerificationReply(r.Context(), api.db, input.ExternalMessageID, time.Now().UTC().Format(time.RFC3339Nano), sent); err != nil {
-				writeError(w, http.StatusInternalServerError, "internal_error")
-				return
-			}
 		}
 	}
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})

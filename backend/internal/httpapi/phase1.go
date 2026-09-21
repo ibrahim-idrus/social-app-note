@@ -40,6 +40,7 @@ type API struct {
 	inboxOwnerEmail                                                 string
 	productName                                                     string
 	httpClient                                                      *http.Client
+	instagramWebhookVerifyToken, instagramAppSecret                 string
 }
 
 type authentication struct {
