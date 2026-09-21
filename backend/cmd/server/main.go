@@ -34,13 +34,6 @@ func main() {
 	}
 	defer db.Close()
 
-	instagramOptions := httpapi.Options{
-		SecureCookies: cfg.SessionCookieSecure, InstagramAccountID: cfg.InstagramDedicatedAccountID, InstagramUsername: cfg.InstagramDedicatedUsername, InstagramAccessToken: cfg.InstagramAccessToken,
-		InstagramUser1AccountID: cfg.InstagramUser1AccountID, InstagramAccessUser1Token: cfg.InstagramAccessUser1Token,
-		InstagramUser2AccountID: cfg.InstagramUser2AccountID, InstagramAccessUser2Token: cfg.InstagramAccessUser2Token,
-		InboxOwnerEmail: cfg.InstagramInboxOwnerEmail,
-	}
-
 	server := &http.Server{
 		Addr: cfg.HTTPAddr,
 		Handler: httpapi.Handler(db, httpapi.Options{
@@ -61,14 +54,6 @@ func main() {
 
 	stop, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	go httpapi.StartInstagramPoller(stop, db, instagramOptions, time.Duration(cfg.InstagramPollIntervalSeconds)*time.Second,
-		func(saved int, err error) {
-			if err != nil {
-				log.Printf("instagram poll: %v", err)
-			} else if saved > 0 {
-				log.Printf("instagram poll: saved %d note(s)", saved)
-			}
-		})
 	<-stop.Done()
 	ctx, shutdown := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdown()
