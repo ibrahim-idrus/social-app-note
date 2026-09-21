@@ -22,8 +22,14 @@ import (
 
 func (api *API) socialPlatforms(w http.ResponseWriter, _ *http.Request, _ authentication) {
 	inbox, _ := store.GetInstagramIntegration(context.Background(), api.db)
+	senders := []map[string]string{}
+	for _, sender := range api.instagramSenders {
+		if sender.accountID != "" && sender.accessToken != "" && sender.accountID != api.instagramAccountID && sender.username != "" {
+			senders = append(senders, map[string]string{"username": sender.username})
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"platforms": []map[string]any{{
-		"id": "instagram", "name": "Instagram", "available": true, "search_enabled": false, "inbox": inbox,
+		"id": "instagram", "name": "Instagram", "available": true, "search_enabled": false, "inbox": inbox, "senders": senders,
 	}}})
 }
 
@@ -37,7 +43,7 @@ type instagramAccountMatch struct {
 var errInstagramAuth = errors.New("instagram authentication failed")
 
 type instagramSender struct {
-	accountID, accessToken string
+	accountID, username, accessToken string
 }
 
 func (api *API) verificationSender() (instagramSender, bool) {
@@ -235,7 +241,7 @@ func (api *API) simulatedInstagramDM(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) sendInstagramText(ctx context.Context, recipientID, text string) error {
-	return api.sendInstagramTextFrom(ctx, instagramSender{api.instagramAccountID, api.instagramAccessToken}, recipientID, text)
+	return api.sendInstagramTextFrom(ctx, instagramSender{accountID: api.instagramAccountID, accessToken: api.instagramAccessToken}, recipientID, text)
 }
 
 func (api *API) sendInstagramTextFrom(ctx context.Context, sender instagramSender, recipientID, text string) error {

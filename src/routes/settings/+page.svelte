@@ -101,7 +101,7 @@
 					<p>Loading…</p>
 				{:else}
 					{#if error}<div class="notice error" role="alert">{error}</div>{/if}
-					{#if platforms.find((platform) => platform.id === 'instagram')?.inbox}<div class="notice"><strong>Dedicated receiving inbox</strong><p>@{platforms.find((platform) => platform.id === 'instagram')?.inbox?.username} receives note messages. It is not a user account.</p></div>{/if}
+					{#if platforms.find((platform) => platform.id === 'instagram')?.inbox}<div class="notice"><strong>Instagram sender</strong><p>{platforms.find((platform) => platform.id === 'instagram')?.senders?.map((sender) => `@${sender.username}`).join(', ') || 'No sender configured'} sends verification messages to @{platforms.find((platform) => platform.id === 'instagram')?.inbox?.username}.</p></div>{/if}
 					{#each identities as identity (identity.id)}
 						<div class="platform-title"><span class="platform-icon"><MessageCircle size={20} /></span><div><strong>{platforms.find((platform) => platform.id === identity.platform)?.name ?? identity.platform}</strong><p class="field-help">@{identity.username}</p></div></div>
 						{#if identity.verification_state === 'active'}
