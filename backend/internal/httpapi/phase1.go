@@ -37,6 +37,7 @@ type API struct {
 	limiter                                                         *loginLimiter
 	instagramAccountID, instagramAccessToken, instagramGraphVersion string
 	instagramSenders                                                []instagramSender
+	inboxOwnerEmail                                                 string
 	productName                                                     string
 	httpClient                                                      *http.Client
 }

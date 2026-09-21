@@ -330,6 +330,28 @@ func commitInstagramDMOutcome(tx *sql.Tx, outcome InstagramDMOutcome) (Instagram
 	return outcome, nil
 }
 
+// SaveInstagramInboxNote stores an inbox DM that no identity claimed (e.g. a
+// stranger's message) under the inbox owner's account. Dedup is free via the
+// UNIQUE(source, external_message_id) constraint: re-polls are no-ops.
+func SaveInstagramInboxNote(ctx context.Context, db *sql.DB, ownerID int64, senderLabel, messageID, text string) (bool, error) {
+	if strings.TrimSpace(text) == "" || messageID == "" {
+		return false, nil
+	}
+	if len(text) > 100_000 {
+		text = text[:100_000]
+	}
+	result, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO notes (user_id, title, content_markdown, source, external_message_id) VALUES (?, ?, ?, 'instagram', ?)`,
+		ownerID, "Instagram DM from @"+senderLabel, text, messageID)
+	if err != nil {
+		return false, err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return count == 1, nil
+}
+
 func RecordInstagramVerificationReply(ctx context.Context, db *sql.DB, externalMessageID, attemptedAt string, sent bool) error {
 	result := "sent"
 	if !sent {
