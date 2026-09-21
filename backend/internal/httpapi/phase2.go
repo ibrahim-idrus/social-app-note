@@ -226,7 +226,7 @@ func (api *API) simulatedInstagramDM(w http.ResponseWriter, r *http.Request) {
 		input.MessageType = "text"
 	}
 	if !input.IsSelf && input.MessageType == "text" && input.Text != "" {
-		if err := api.processInstagramText(r.Context(), input.RecipientInstagramUserID, input.SenderPlatformUserID, input.ExternalMessageID, input.Text); err != nil {
+		if err := api.processInstagramText(r.Context(), input.RecipientInstagramUserID, input.SenderPlatformUserID, input.ExternalMessageID, input.Text, false); err != nil {
 			writeError(w, http.StatusInternalServerError, "internal_error")
 			return
 		}

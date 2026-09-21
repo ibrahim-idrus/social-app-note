@@ -88,7 +88,10 @@ func TestInstagramWebhookSignatureAndPayloadValidation(t *testing.T) {
 func TestInstagramWebhookSavesUnmatchedTextToInboxOwner(t *testing.T) {
 	_, c := webhookHandler(t, "verify", "app-secret")
 	c.register(t, "Inbox Owner", "owner@example.com")
-	c.handler = Handler(c.db, Options{InstagramAccountID: "inbox", InstagramUsername: "akun_testing911", InstagramAccessToken: "token", InboxOwnerEmail: "owner@example.com", InstagramWebhookVerifyToken: "verify", InstagramAppSecret: "app-secret"})
+	if _, err := c.db.Exec(`UPDATE instagram_integrations SET owner_user_id=(SELECT id FROM users WHERE email='owner@example.com') WHERE instagram_user_id='inbox'`); err != nil {
+		t.Fatal(err)
+	}
+	c.handler = Handler(c.db, Options{InstagramAccountID: "inbox", InstagramUsername: "akun_testing911", InstagramAccessToken: "token", InstagramWebhookVerifyToken: "verify", InstagramAppSecret: "app-secret"})
 	payload := `{"object":"instagram","entry":[{"id":"inbox","messaging":[{"sender":{"id":"sender-1"},"recipient":{"id":"inbox"},"message":{"mid":"mid-unmatched","text":"instagram e2e"}}]}]}`
 	r := httptest.NewRequest(http.MethodPost, "/api/integrations/instagram/webhook", strings.NewReader(payload))
 	r.Header.Set("X-Hub-Signature-256", signWebhook("app-secret", []byte(payload)))

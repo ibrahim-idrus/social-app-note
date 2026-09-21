@@ -209,6 +209,20 @@ func ConfigureInstagramIntegration(ctx context.Context, db *sql.DB, accountID, u
 	return err
 }
 
+func ConfigureInstagramIntegrationOwner(ctx context.Context, db *sql.DB, accountID, ownerEmail string) error {
+	if accountID == "" || ownerEmail == "" {
+		return nil
+	}
+	_, err := db.ExecContext(ctx, `UPDATE instagram_integrations SET owner_user_id=(SELECT id FROM users WHERE lower(email)=lower(?)) WHERE instagram_user_id=?`, ownerEmail, accountID)
+	return err
+}
+
+func InstagramIntegrationOwnerID(ctx context.Context, db *sql.DB, accountID string) (int64, error) {
+	var ownerID int64
+	err := db.QueryRowContext(ctx, `SELECT owner_user_id FROM instagram_integrations WHERE instagram_user_id=? AND status='active'`, accountID).Scan(&ownerID)
+	return ownerID, err
+}
+
 func ProcessInstagramDM(ctx context.Context, db *sql.DB, recipientID, senderID, externalMessageID, text, now string) (InstagramDMOutcome, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {

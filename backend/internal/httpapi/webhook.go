@@ -25,18 +25,18 @@ func (api *API) instagramWebhookVerify(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(q.Get("hub.challenge")))
 }
 
-func (api *API) processInstagramText(ctx context.Context, recipient, sender, messageID, text string) error {
+func (api *API) processInstagramText(ctx context.Context, recipient, sender, messageID, text string, fallback bool) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	outcome, err := store.ProcessInstagramDM(ctx, api.db, recipient, sender, messageID, text, now)
 	if err != nil {
 		return err
 	}
-	if outcome.Kind == store.InstagramDMUnmatched && api.inboxOwnerEmail != "" {
-		owner, err := store.UserByEmail(ctx, api.db, api.inboxOwnerEmail)
+	if outcome.Kind == store.InstagramDMUnmatched && fallback {
+		ownerID, err := store.InstagramIntegrationOwnerID(ctx, api.db, recipient)
 		if err != nil {
 			return err
 		}
-		_, err = store.SaveInstagramInboxNote(ctx, api.db, owner.ID, sender, messageID, text)
+		_, err = store.SaveInstagramInboxNote(ctx, api.db, ownerID, sender, messageID, text)
 		return err
 	}
 	if !outcome.OwnsReply {
@@ -90,7 +90,7 @@ func (api *API) instagramWebhook(w http.ResponseWriter, r *http.Request) {
 			if event.Message.IsEcho || event.Message.Text == "" || event.Message.MID == "" || event.Sender.ID == "" || event.Recipient.ID == "" || event.Sender.ID == api.instagramAccountID {
 				continue
 			}
-			if err := api.processInstagramText(r.Context(), event.Recipient.ID, event.Sender.ID, event.Message.MID, event.Message.Text); err != nil {
+			if err := api.processInstagramText(r.Context(), event.Recipient.ID, event.Sender.ID, event.Message.MID, event.Message.Text, true); err != nil {
 				writeError(w, http.StatusInternalServerError, "internal_error")
 				return
 			}

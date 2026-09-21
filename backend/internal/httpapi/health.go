@@ -37,6 +37,7 @@ func Handler(db *sql.DB, options ...Options) http.Handler {
 	}
 	api := &API{db: db, secureCookies: option.SecureCookies, limiter: newLoginLimiter(), instagramAccountID: option.InstagramAccountID, instagramAccessToken: option.InstagramAccessToken, instagramGraphVersion: option.InstagramGraphVersion, productName: option.ProductName, httpClient: client, instagramSenders: []instagramSender{{option.InstagramUser1AccountID, option.InstagramAccessUser1Token}, {option.InstagramUser2AccountID, option.InstagramAccessUser2Token}}, inboxOwnerEmail: option.InboxOwnerEmail, instagramWebhookVerifyToken: option.InstagramWebhookVerifyToken, instagramAppSecret: option.InstagramAppSecret}
 	_ = store.ConfigureInstagramIntegration(context.Background(), db, option.InstagramAccountID, option.InstagramUsername, option.InstagramAccessToken)
+	_ = store.ConfigureInstagramIntegrationOwner(context.Background(), db, option.InstagramAccountID, option.InboxOwnerEmail)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
