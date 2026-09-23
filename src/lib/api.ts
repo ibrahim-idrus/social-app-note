@@ -10,7 +10,7 @@ export type Note = {
 	updated_at: string;
 };
 export type NotesPage = { notes: Note[]; total: number; page: number; page_size: number };
-export type SocialPlatform = { id: string; name: string; available: boolean; search_enabled: boolean; inbox?: { instagram_user_id: string; username: string }; senders?: { username: string }[] };
+export type SocialPlatform = { id: string; name: string; available: boolean; search_enabled: boolean; inbox?: { instagram_user_id: string; username: string } };
 export type SocialAccountMatch = { id: string; username: string; name: string; profile_picture_url: string };
 export type SocialIdentity = {
 	id: number;

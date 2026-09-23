@@ -10,17 +10,14 @@ import (
 )
 
 type Config struct {
-	HTTPAddr                                                                   string
-	DatabasePath                                                               string
-	SessionCookieSecure                                                        bool
-	InstagramEnabled                                                           bool
-	InstagramInboxOwnerEmail                                                   string
-	InstagramPollIntervalSeconds                                               int
-	InstagramAppID, InstagramAppSecret                                         string
-	InstagramDedicatedAccountID, InstagramDedicatedUsername                    string
-	InstagramWebhookVerifyToken, InstagramAccessToken                          string
-	InstagramUser1AccountID, InstagramUser1Username, InstagramAccessUser1Token string
-	InstagramUser2AccountID, InstagramUser2Username, InstagramAccessUser2Token string
+	HTTPAddr                                                string
+	DatabasePath                                            string
+	SessionCookieSecure                                     bool
+	InstagramEnabled                                        bool
+	InstagramInboxOwnerEmail                                string
+	InstagramAppID, InstagramAppSecret                      string
+	InstagramDedicatedAccountID, InstagramDedicatedUsername string
+	InstagramWebhookVerifyToken, InstagramAccessToken       string
 }
 
 const instagramPermissions = "instagram_business_basic,instagram_business_manage_messages"
@@ -33,10 +30,8 @@ var supported = map[string]bool{
 	"INSTAGRAM_APP_ID":      true, "INSTAGRAM_APP_SECRET": true,
 	"INSTAGRAM_DEDICATED_ACCOUNT_ID": true, "INSTAGRAM_DEDICATED_USERNAME": true,
 	"INSTAGRAM_WEBHOOK_VERIFY_TOKEN": true, "INSTAGRAM_ACCESS_TOKEN": true,
-	"INSTAGRAM_PERMISSIONS":      true,
-	"INSTAGRAM_USER1_ACCOUNT_ID": true, "INSTAGRAM_USER1_USERNAME": true, "INSTAGRAM_ACCESS_USER1_TOKEN": true,
-	"INSTAGRAM_USER2_ACCOUNT_ID": true, "INSTAGRAM_USER2_USERNAME": true, "INSTAGRAM_ACCESS_USER2_TOKEN": true,
-	"INSTAGRAM_INBOX_OWNER_EMAIL": true, "INSTAGRAM_POLL_INTERVAL_SECONDS": true,
+	"INSTAGRAM_PERMISSIONS":       true,
+	"INSTAGRAM_INBOX_OWNER_EMAIL": true,
 }
 
 func Load(path string) (Config, error) {
@@ -108,7 +103,6 @@ func Load(path string) (Config, error) {
 	instagramKeys := []string{
 		"INSTAGRAM_APP_ID", "INSTAGRAM_APP_SECRET", "INSTAGRAM_DEDICATED_ACCOUNT_ID", "INSTAGRAM_DEDICATED_USERNAME",
 		"INSTAGRAM_WEBHOOK_VERIFY_TOKEN", "INSTAGRAM_ACCESS_TOKEN", "INSTAGRAM_INBOX_OWNER_EMAIL",
-		"INSTAGRAM_USER1_ACCOUNT_ID", "INSTAGRAM_ACCESS_USER1_TOKEN", "INSTAGRAM_USER2_ACCOUNT_ID", "INSTAGRAM_ACCESS_USER2_TOKEN",
 	}
 	instagramConfigured := false
 	for _, key := range instagramKeys {
@@ -124,20 +118,6 @@ func Load(path string) (Config, error) {
 			}
 		}
 	}
-	for _, pair := range [][2]string{{"INSTAGRAM_USER1_ACCOUNT_ID", "INSTAGRAM_ACCESS_USER1_TOKEN"}, {"INSTAGRAM_USER2_ACCOUNT_ID", "INSTAGRAM_ACCESS_USER2_TOKEN"}} {
-		if (values[pair[0]] == "") != (values[pair[1]] == "") {
-			return Config{}, fmt.Errorf("%s and %s must be configured together", pair[0], pair[1])
-		}
-	}
-
-	pollInterval := 60
-	if raw := values["INSTAGRAM_POLL_INTERVAL_SECONDS"]; raw != "" {
-		parsed, err := strconv.Atoi(raw)
-		if err != nil || parsed < 15 || parsed > 3600 {
-			return Config{}, fmt.Errorf("INSTAGRAM_POLL_INTERVAL_SECONDS must be 15-3600")
-		}
-		pollInterval = parsed
-	}
 
 	return Config{
 		HTTPAddr:            values["HTTP_ADDR"],
@@ -147,8 +127,6 @@ func Load(path string) (Config, error) {
 		InstagramAppID:      values["INSTAGRAM_APP_ID"], InstagramAppSecret: values["INSTAGRAM_APP_SECRET"],
 		InstagramDedicatedAccountID: values["INSTAGRAM_DEDICATED_ACCOUNT_ID"], InstagramDedicatedUsername: values["INSTAGRAM_DEDICATED_USERNAME"],
 		InstagramWebhookVerifyToken: values["INSTAGRAM_WEBHOOK_VERIFY_TOKEN"], InstagramAccessToken: values["INSTAGRAM_ACCESS_TOKEN"],
-		InstagramUser1AccountID: values["INSTAGRAM_USER1_ACCOUNT_ID"], InstagramUser1Username: values["INSTAGRAM_USER1_USERNAME"], InstagramAccessUser1Token: values["INSTAGRAM_ACCESS_USER1_TOKEN"],
-		InstagramUser2AccountID: values["INSTAGRAM_USER2_ACCOUNT_ID"], InstagramUser2Username: values["INSTAGRAM_USER2_USERNAME"], InstagramAccessUser2Token: values["INSTAGRAM_ACCESS_USER2_TOKEN"],
-		InstagramInboxOwnerEmail: values["INSTAGRAM_INBOX_OWNER_EMAIL"], InstagramPollIntervalSeconds: pollInterval,
+		InstagramInboxOwnerEmail: values["INSTAGRAM_INBOX_OWNER_EMAIL"],
 	}, nil
 }

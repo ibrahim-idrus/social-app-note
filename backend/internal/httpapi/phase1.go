@@ -36,11 +36,10 @@ type API struct {
 	secureCookies                                                   bool
 	limiter                                                         *loginLimiter
 	instagramAccountID, instagramAccessToken, instagramGraphVersion string
-	instagramSenders                                                []instagramSender
-	inboxOwnerEmail                                                 string
-	productName                                                     string
-	httpClient                                                      *http.Client
-	instagramWebhookVerifyToken, instagramAppSecret                 string
+
+	productName                                     string
+	httpClient                                      *http.Client
+	instagramWebhookVerifyToken, instagramAppSecret string
 }
 
 type authentication struct {

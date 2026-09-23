@@ -22,14 +22,8 @@ import (
 
 func (api *API) socialPlatforms(w http.ResponseWriter, _ *http.Request, _ authentication) {
 	inbox, _ := store.GetInstagramIntegration(context.Background(), api.db)
-	senders := []map[string]string{}
-	for _, sender := range api.instagramSenders {
-		if sender.accountID != "" && sender.accessToken != "" && sender.accountID != api.instagramAccountID && sender.username != "" {
-			senders = append(senders, map[string]string{"username": sender.username})
-		}
-	}
 	writeJSON(w, http.StatusOK, map[string]any{"platforms": []map[string]any{{
-		"id": "instagram", "name": "Instagram", "available": true, "search_enabled": false, "inbox": inbox, "senders": senders,
+		"id": "instagram", "name": "Instagram", "available": true, "search_enabled": false, "inbox": inbox,
 	}}})
 }
 
@@ -41,19 +35,6 @@ type instagramAccountMatch struct {
 }
 
 var errInstagramAuth = errors.New("instagram authentication failed")
-
-type instagramSender struct {
-	accountID, username, accessToken string
-}
-
-func (api *API) verificationSender() (instagramSender, bool) {
-	for _, sender := range api.instagramSenders {
-		if sender.accountID != "" && sender.accessToken != "" && sender.accountID != api.instagramAccountID {
-			return sender, true
-		}
-	}
-	return instagramSender{}, false
-}
 
 func (api *API) discoverInstagramAccount(ctx context.Context, username string) (*instagramAccountMatch, error) {
 	endpoint := fmt.Sprintf("https://graph.instagram.com/%s/me", url.PathEscape(api.instagramGraphVersion))
@@ -169,14 +150,6 @@ func (api *API) createSocialIdentity(w http.ResponseWriter, r *http.Request, aut
 		return
 	}
 	identity.VerificationCode = code
-	// Automatic delivery is optional until a distinct user sender is configured.
-	if sender, ok := api.verificationSender(); ok {
-		if err := api.sendInstagramTextFrom(r.Context(), sender, api.instagramAccountID, code); err != nil {
-			_ = store.DeleteSocialIdentity(r.Context(), api.db, auth.ID, identity.ID)
-			writeError(w, http.StatusBadGateway, "instagram_send_failed")
-			return
-		}
-	}
 	writeJSON(w, http.StatusCreated, identity)
 }
 
@@ -190,12 +163,6 @@ func (api *API) regenerateSocialIdentityCode(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error")
 		return
-	}
-	if sender, ok := api.verificationSender(); ok {
-		if err := api.sendInstagramTextFrom(r.Context(), sender, api.instagramAccountID, code); err != nil {
-			writeError(w, http.StatusBadGateway, "instagram_send_failed")
-			return
-		}
 	}
 	identity, err := store.ReplaceSocialIdentityVerification(r.Context(), api.db, auth.ID, id, codeHash, expiresAt)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -241,11 +208,11 @@ func (api *API) simulatedInstagramDM(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) sendInstagramText(ctx context.Context, recipientID, text string) error {
-	return api.sendInstagramTextFrom(ctx, instagramSender{accountID: api.instagramAccountID, accessToken: api.instagramAccessToken}, recipientID, text)
+	return api.sendInstagramTextFrom(ctx, api.instagramAccountID, api.instagramAccessToken, recipientID, text)
 }
 
-func (api *API) sendInstagramTextFrom(ctx context.Context, sender instagramSender, recipientID, text string) error {
-	if sender.accountID == "" || sender.accessToken == "" || recipientID == "" {
+func (api *API) sendInstagramTextFrom(ctx context.Context, accountID, accessToken, recipientID, text string) error {
+	if accountID == "" || accessToken == "" || recipientID == "" {
 		return errors.New("instagram messaging is not configured")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -257,12 +224,12 @@ func (api *API) sendInstagramTextFrom(ctx context.Context, sender instagramSende
 	if err != nil {
 		return err
 	}
-	endpoint := fmt.Sprintf("https://graph.instagram.com/%s/%s/messages", url.PathEscape(api.instagramGraphVersion), url.PathEscape(sender.accountID))
+	endpoint := fmt.Sprintf("https://graph.instagram.com/%s/%s/messages", url.PathEscape(api.instagramGraphVersion), url.PathEscape(accountID))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+sender.accessToken)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Content-Type", "application/json")
 	res, err := api.httpClient.Do(req)
 	if err != nil {

@@ -101,10 +101,10 @@ test('Instagram sender registration posts a username without treating the inbox 
 	assert.deepEqual(await requests[0].json(), { platform: 'instagram', username: 'alice' });
 });
 
-test('settings labels configured Instagram sender accounts', async () => {
+test('settings instructs users to verify from their own Instagram account', async () => {
 	const source = await (await import('node:fs/promises')).readFile('src/routes/settings/+page.svelte', 'utf8');
-	assert.match(source, /Instagram sender/);
-	assert.match(source, /platform\.id === 'instagram'\)\?\.senders/);
+	assert.match(source, /Dedicated Instagram inbox/);
+	assert.match(source, /From your own @\{identity\.username\} account/);
 	assert.match(source, /Connect sender account/);
 	assert.doesNotMatch(source, /searchSocialIdentities|Is this your account\?|Yes, connect this account|Searching…/);
 	assert.match(source, /DM this code/i);

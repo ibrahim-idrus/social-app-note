@@ -39,7 +39,7 @@ func TestInstagramPlatformExposesDedicatedInboxWithoutSearch(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	handler := Handler(db, Options{InstagramAccountID: "inbox-id", InstagramUsername: "akun_testing911", InstagramAccessToken: "secret-token", InstagramUser1AccountID: "sender-id", InstagramUser1Username: "MegatronMakanAyam", InstagramAccessUser1Token: "sender-token"})
+	handler := Handler(db, Options{InstagramAccountID: "inbox-id", InstagramUsername: "akun_testing911", InstagramAccessToken: "secret-token"})
 	c := newTestClientWithHandler(t, handler)
 	c.db = db
 	c.register(t, "Owner", "owner@example.com")
@@ -48,8 +48,8 @@ func TestInstagramPlatformExposesDedicatedInboxWithoutSearch(t *testing.T) {
 	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"search_enabled":false`) || !strings.Contains(res.Body.String(), `"inbox":{"instagram_user_id":"inbox-id","username":"akun_testing911"}`) {
 		t.Fatalf("platforms = %d %s", res.Code, res.Body.String())
 	}
-	if !strings.Contains(res.Body.String(), `"senders":[{"username":"MegatronMakanAyam"}]`) {
-		t.Fatalf("configured senders missing: %s", res.Body.String())
+	if strings.Contains(res.Body.String(), `"senders"`) {
+		t.Fatalf("obsolete configured senders exposed: %s", res.Body.String())
 	}
 	if got := c.request(t, http.MethodGet, "/api/social-identities/search?username=akun_testing911", nil, false).Code; got != http.StatusMethodNotAllowed {
 		t.Fatalf("search route = %d, want 405", got)

@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -214,8 +215,21 @@ func ConfigureInstagramIntegrationOwner(ctx context.Context, db *sql.DB, account
 	if accountID == "" || ownerEmail == "" {
 		return nil
 	}
-	_, err := db.ExecContext(ctx, `UPDATE instagram_integrations SET owner_user_id=(SELECT id FROM users WHERE lower(email)=lower(?)) WHERE instagram_user_id=?`, ownerEmail, accountID)
-	return err
+	var ownerID int64
+	if err := db.QueryRowContext(ctx, `SELECT id FROM users WHERE lower(email)=lower(?)`, ownerEmail).Scan(&ownerID); err != nil {
+		return fmt.Errorf("instagram inbox owner %q: %w", ownerEmail, err)
+	}
+	result, err := db.ExecContext(ctx, `UPDATE instagram_integrations SET owner_user_id=? WHERE instagram_user_id=?`, ownerID, accountID)
+	if err != nil {
+		return err
+	}
+	if count, err := result.RowsAffected(); err != nil || count != 1 {
+		if err != nil {
+			return err
+		}
+		return errors.New("instagram integration not configured")
+	}
+	return nil
 }
 
 func InstagramIntegrationOwnerID(ctx context.Context, db *sql.DB, accountID string) (int64, error) {

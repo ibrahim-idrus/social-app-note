@@ -101,7 +101,7 @@
 					<p>Loading…</p>
 				{:else}
 					{#if error}<div class="notice error" role="alert">{error}</div>{/if}
-					{#if platforms.find((platform) => platform.id === 'instagram')?.inbox}<div class="notice"><strong>Instagram sender</strong><p>{platforms.find((platform) => platform.id === 'instagram')?.senders?.map((sender) => `@${sender.username}`).join(', ') || 'No sender configured'} sends verification messages to @{platforms.find((platform) => platform.id === 'instagram')?.inbox?.username}.</p></div>{/if}
+					{#if platforms.find((platform) => platform.id === 'instagram')?.inbox}<div class="notice"><strong>Dedicated Instagram inbox</strong><p>Send verification codes and notes to @{platforms.find((platform) => platform.id === 'instagram')?.inbox?.username}.</p></div>{/if}
 					{#each identities as identity (identity.id)}
 						<div class="platform-title"><span class="platform-icon"><MessageCircle size={20} /></span><div><strong>{platforms.find((platform) => platform.id === identity.platform)?.name ?? identity.platform}</strong><p class="field-help">@{identity.username}</p></div></div>
 						{#if identity.verification_state === 'active'}
@@ -119,7 +119,7 @@
 						{:else if identity.status === 'pending'}
 							<div class="notice verification-instructions">
 								<div>
-									<p><strong>DM this code to @{(registration?.id === identity.id ? registration.instagram_account : identity.instagram_account)?.username}</strong></p>
+									<p><strong>From your own @{identity.username} account, DM this code to @{(registration?.id === identity.id ? registration.instagram_account : identity.instagram_account)?.username}</strong></p>
 									{#if registration?.id === identity.id}<code>{registration.verification_code}</code>{:else}<p>Your code is hidden after reload.</p>{/if}
 									<p>The code expires after 10 minutes. Regenerate it if needed.</p>
 								</div>

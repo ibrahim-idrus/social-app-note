@@ -33,14 +33,18 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
+	if err := store.ConfigureInstagramIntegration(context.Background(), db, cfg.InstagramDedicatedAccountID, cfg.InstagramDedicatedUsername, cfg.InstagramAccessToken); err != nil {
+		log.Fatal(err)
+	}
+	if err := store.ConfigureInstagramIntegrationOwner(context.Background(), db, cfg.InstagramDedicatedAccountID, cfg.InstagramInboxOwnerEmail); err != nil {
+		log.Fatal(err)
+	}
 
 	server := &http.Server{
 		Addr: cfg.HTTPAddr,
 		Handler: httpapi.Handler(db, httpapi.Options{
 			SecureCookies: cfg.SessionCookieSecure, InstagramAccountID: cfg.InstagramDedicatedAccountID, InstagramUsername: cfg.InstagramDedicatedUsername, InstagramAccessToken: cfg.InstagramAccessToken,
-			InstagramUser1AccountID: cfg.InstagramUser1AccountID, InstagramUser1Username: cfg.InstagramUser1Username, InstagramAccessUser1Token: cfg.InstagramAccessUser1Token,
-			InstagramUser2AccountID: cfg.InstagramUser2AccountID, InstagramUser2Username: cfg.InstagramUser2Username, InstagramAccessUser2Token: cfg.InstagramAccessUser2Token,
-			InboxOwnerEmail:             cfg.InstagramInboxOwnerEmail,
+
 			InstagramWebhookVerifyToken: cfg.InstagramWebhookVerifyToken, InstagramAppSecret: cfg.InstagramAppSecret,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,

@@ -115,9 +115,8 @@ func TestInstagramRegistrationReturnsVisibleCodeButStoresOnlyHash(t *testing.T) 
 	}
 }
 
-func TestInstagramRegistrationSendsCodeFromDistinctConfiguredUser(t *testing.T) {
-	var request *http.Request
-	var body []byte
+func TestInstagramRegistrationRequiresManualDMFromUsersOwnAccount(t *testing.T) {
+	requests := 0
 	db, err := store.Open(filepath.Join(t.TempDir(), "sqlite.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -125,58 +124,19 @@ func TestInstagramRegistrationSendsCodeFromDistinctConfiguredUser(t *testing.T) 
 	t.Cleanup(func() { db.Close() })
 	c := newTestClientWithHandler(t, Handler(db, Options{
 		InstagramAccountID: "inbox-id", InstagramUsername: "akun_testing911", InstagramAccessToken: "inbox-token",
-		InstagramUser1AccountID: "inbox-id", InstagramAccessUser1Token: "must-not-be-used",
-		InstagramUser2AccountID: "user-2", InstagramAccessUser2Token: "user-token-2",
 		HTTPClient: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			request = req
-			body, err = io.ReadAll(req.Body)
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{}`)), Header: make(http.Header)}, err
+			requests++
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{}`)), Header: make(http.Header)}, nil
 		})},
 	}))
 	c.db = db
 	c.register(t, "Alice", "alice@example.com")
 	registration := registerInstagram(t, c, "alice")
-	if request == nil || request.URL.String() != "https://graph.instagram.com/v26.0/user-2/messages" || request.Header.Get("Authorization") != "Bearer user-token-2" {
-		t.Fatalf("send request = %#v", request)
+	if requests != 0 {
+		t.Fatalf("registration made %d outbound Instagram requests", requests)
 	}
-	var payload struct {
-		Recipient struct {
-			ID string `json:"id"`
-		} `json:"recipient"`
-		Message struct {
-			Text string `json:"text"`
-		} `json:"message"`
-	}
-	if err := json.Unmarshal(body, &payload); err != nil {
-		t.Fatal(err)
-	}
-	if payload.Recipient.ID != "inbox-id" || payload.Message.Text != registration.VerificationCode {
-		t.Fatalf("send payload = %#v, code %q", payload, registration.VerificationCode)
-	}
-}
-
-func TestInstagramRegistrationSendFailureCreatesNoIdentity(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "sqlite.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { db.Close() })
-	c := newTestClientWithHandler(t, Handler(db, Options{
-		InstagramAccountID: "inbox-id", InstagramUsername: "akun_testing911",
-		InstagramUser1AccountID: "user-1", InstagramAccessUser1Token: "user-token-1",
-		HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
-			return &http.Response{StatusCode: http.StatusBadGateway, Body: io.NopCloser(strings.NewReader(`{"error":"provider-secret"}`)), Header: make(http.Header)}, nil
-		})},
-	}))
-	c.db = db
-	c.register(t, "Alice", "alice@example.com")
-	res := c.request(t, http.MethodPost, "/api/social-identities", map[string]string{"platform": "instagram", "username": "alice"}, true)
-	if res.Code != http.StatusBadGateway || strings.Contains(res.Body.String(), "provider-secret") {
-		t.Fatalf("create response = %d %s", res.Code, res.Body.String())
-	}
-	var count int
-	if err := db.QueryRow(`SELECT count(*) FROM social_identities`).Scan(&count); err != nil || count != 0 {
-		t.Fatalf("identities = %d, err %v", count, err)
+	if registration.VerificationCode == "" || registration.InstagramAccount.Username != "akun_testing911" {
+		t.Fatalf("manual verification instructions = %#v", registration)
 	}
 }
 
