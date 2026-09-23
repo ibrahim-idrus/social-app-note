@@ -14,7 +14,9 @@ type Options struct {
 	InstagramAccountID, InstagramUsername, InstagramAccessToken string
 	InstagramWebhookVerifyToken, InstagramAppSecret             string
 	InstagramGraphVersion, ProductName                          string
-	HTTPClient                                                  *http.Client
+	// Optional trace aid: expected sender ID, logged by webhook, never used for lookup.
+	InstagramUser2AccountID string
+	HTTPClient              *http.Client
 }
 
 func Handler(db *sql.DB, options ...Options) http.Handler {
@@ -32,7 +34,7 @@ func Handler(db *sql.DB, options ...Options) http.Handler {
 	if option.ProductName == "" {
 		option.ProductName = "NoteDesk"
 	}
-	api := &API{db: db, secureCookies: option.SecureCookies, limiter: newLoginLimiter(), instagramAccountID: option.InstagramAccountID, instagramAccessToken: option.InstagramAccessToken, instagramGraphVersion: option.InstagramGraphVersion, productName: option.ProductName, httpClient: client, instagramWebhookVerifyToken: option.InstagramWebhookVerifyToken, instagramAppSecret: option.InstagramAppSecret}
+	api := &API{db: db, secureCookies: option.SecureCookies, limiter: newLoginLimiter(), instagramAccountID: option.InstagramAccountID, instagramAccessToken: option.InstagramAccessToken, instagramGraphVersion: option.InstagramGraphVersion, productName: option.ProductName, httpClient: client, instagramWebhookVerifyToken: option.InstagramWebhookVerifyToken, instagramAppSecret: option.InstagramAppSecret, instagramUser2AccountID: option.InstagramUser2AccountID}
 	_ = store.ConfigureInstagramIntegration(context.Background(), db, option.InstagramAccountID, option.InstagramUsername, option.InstagramAccessToken)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {

@@ -36,7 +36,8 @@ type API struct {
 	secureCookies                                                   bool
 	limiter                                                         *loginLimiter
 	instagramAccountID, instagramAccessToken, instagramGraphVersion string
-
+	// Expected sender for trace logs only. Never used for inbox lookup.
+	instagramUser2AccountID                         string
 	productName                                     string
 	httpClient                                      *http.Client
 	instagramWebhookVerifyToken, instagramAppSecret string

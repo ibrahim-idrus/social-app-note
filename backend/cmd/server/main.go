@@ -44,7 +44,7 @@ func main() {
 		Addr: cfg.HTTPAddr,
 		Handler: httpapi.Handler(db, httpapi.Options{
 			SecureCookies: cfg.SessionCookieSecure, InstagramAccountID: cfg.InstagramDedicatedAccountID, InstagramUsername: cfg.InstagramDedicatedUsername, InstagramAccessToken: cfg.InstagramAccessToken,
-
+			InstagramUser2AccountID:     cfg.InstagramUser2AccountID,
 			InstagramWebhookVerifyToken: cfg.InstagramWebhookVerifyToken, InstagramAppSecret: cfg.InstagramAppSecret,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,

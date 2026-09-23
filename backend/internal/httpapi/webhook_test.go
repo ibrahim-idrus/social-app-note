@@ -104,6 +104,31 @@ func TestInstagramWebhookSavesUnmatchedTextToInboxOwner(t *testing.T) {
 	}
 }
 
+func TestInstagramWebhookRoutesDedicatedRecipientAndUser2Sender(t *testing.T) {
+	db, err := store.Open(filepath.Join(t.TempDir(), "sqlite.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	h := Handler(db, Options{InstagramAccountID: "17841426326903892", InstagramUsername: "akun_testing911", InstagramAccessToken: "token", InstagramUser2AccountID: "17841421563711996", InstagramWebhookVerifyToken: "verify", InstagramAppSecret: "app-secret"})
+	c := &testClient{handler: h, db: db}
+	c.register(t, "Inbox Owner", "owner@example.com")
+	if _, err := c.db.Exec(`UPDATE instagram_integrations SET owner_user_id=(SELECT id FROM users WHERE email='owner@example.com') WHERE instagram_user_id='17841426326903892'`); err != nil {
+		t.Fatal(err)
+	}
+	// Inbound DM: recipient = dedicated inbox, sender = user2. No usernames used.
+	payload := `{"object":"instagram","entry":[{"id":"17841426326903892","messaging":[{"sender":{"id":"17841421563711996"},"recipient":{"id":"17841426326903892"},"message":{"mid":"mid-user2","text":"hello inbox"}}]}]}`
+	r := httptest.NewRequest(http.MethodPost, "/api/integrations/instagram/webhook", strings.NewReader(payload))
+	r.Header.Set("X-Hub-Signature-256", signWebhook("app-secret", []byte(payload)))
+	w := httptest.NewRecorder()
+	c.handler.ServeHTTP(w, r)
+	var source, externalID, content, title string
+	err = c.db.QueryRow(`SELECT source, external_message_id, content_markdown, title FROM notes`).Scan(&source, &externalID, &content, &title)
+	if w.Code != http.StatusOK || err != nil || source != "instagram" || externalID != "mid-user2" || content != "hello inbox" || !strings.Contains(title, "17841421563711996") {
+		t.Fatalf("status=%d source=%q external=%q content=%q title=%q err=%v", w.Code, source, externalID, content, title, err)
+	}
+}
+
 func TestInstagramWebhookIgnoresEventsOutsideConfiguredInbox(t *testing.T) {
 	_, c := webhookHandler(t, "verify", "app-secret")
 	c.register(t, "Inbox Owner", "owner@example.com")

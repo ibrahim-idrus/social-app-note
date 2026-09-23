@@ -23,10 +23,13 @@ func TestLoad(t *testing.T) {
 	}
 
 	tests := []struct {
-		name       string
-		contents   string
-		wantSecure bool
-		wantErr    string
+		name          string
+		contents      string
+		wantSecure    bool
+		wantErr       string
+		wantUser2     string
+		wantAppID     string
+		wantAppSecret string
 	}{
 		{
 			name: "valid",
@@ -55,10 +58,27 @@ func TestLoad(t *testing.T) {
 			wantErr: "INSTAGRAM_APP_ID is required when Instagram is configured",
 		},
 		{
-			name: "obsolete instagram sender setting",
+			name: "obsolete instagram sender setting ignored",
 			contents: "HTTP_ADDR=127.0.0.1:8080\nDATABASE_PATH=sqlite.db\nSESSION_COOKIE_SECURE=false\nINSTAGRAM_ENABLED=false\n" +
-				"INSTAGRAM_APP_ID=app\nINSTAGRAM_APP_SECRET=secret\nINSTAGRAM_DEDICATED_ACCOUNT_ID=inbox\nINSTAGRAM_DEDICATED_USERNAME=inbox_name\nINSTAGRAM_WEBHOOK_VERIFY_TOKEN=verify\nINSTAGRAM_ACCESS_TOKEN=token\nINSTAGRAM_PERMISSIONS=instagram_business_basic,instagram_business_manage_messages\nINSTAGRAM_INBOX_OWNER_EMAIL=owner@example.com\nINSTAGRAM_USER1_ACCOUNT_ID=user-1\n",
-			wantErr: "unknown setting INSTAGRAM_USER1_ACCOUNT_ID",
+				"INSTAGRAM_APP_ID=app\nINSTAGRAM_APP_SECRET=secret\nINSTAGRAM_DEDICATED_ACCOUNT_ID=inbox\nINSTAGRAM_DEDICATED_USERNAME=inbox_name\nINSTAGRAM_WEBHOOK_VERIFY_TOKEN=verify\nINSTAGRAM_ACCESS_TOKEN=token\nINSTAGRAM_PERMISSIONS=instagram_business_basic,instagram_business_manage_messages\nINSTAGRAM_INBOX_OWNER_EMAIL=owner@example.com\nINSTAGRAM_USER1_ACCOUNT_ID=user-1\nINSTAGRAM_ACCESS_USER1_TOKEN=t1\nINSTAGRAM_ACCESS_USER2_TOKEN=t2\nINSTAGRAM_POLL_INTERVAL_SECONDS=15\n",
+		},
+		{
+			name: "instagram user2 trace setting accepted",
+			contents: "HTTP_ADDR=127.0.0.1:8080\n" +
+				"DATABASE_PATH=sqlite.db\n" +
+				"SESSION_COOKIE_SECURE=false\n" +
+				"INSTAGRAM_ENABLED=false\n" +
+				"INSTAGRAM_APP_ID=app\nINSTAGRAM_APP_SECRET=secret\nINSTAGRAM_DEDICATED_ACCOUNT_ID=17841426326903892\nINSTAGRAM_DEDICATED_USERNAME=akun_testing911\nINSTAGRAM_WEBHOOK_VERIFY_TOKEN=verify\nINSTAGRAM_ACCESS_TOKEN=token\nINSTAGRAM_PERMISSIONS=instagram_business_basic,instagram_business_manage_messages\nINSTAGRAM_INBOX_OWNER_EMAIL=owner@example.com\nINSTAGRAM_USER2_ACCOUNT_ID=17841421563711996\n",
+			wantUser2: "17841421563711996",
+		},
+		{
+			name: "bare meta app credentials preserved",
+			contents: "HTTP_ADDR=127.0.0.1:8080\n" +
+				"DATABASE_PATH=sqlite.db\n" +
+				"SESSION_COOKIE_SECURE=false\n" +
+				"INSTAGRAM_ENABLED=false\n" +
+				"APP_ID=904155979215067\nAPP_SECRET=secret\n",
+			wantAppID: "904155979215067", wantAppSecret: "secret",
 		},
 		{
 			name: "HTTPS cookies",
@@ -113,6 +133,15 @@ func TestLoad(t *testing.T) {
 			}
 			if tt.name == "valid" && (got.InstagramDedicatedAccountID != "17841426326903892" || got.InstagramDedicatedUsername != "akun_testing911" || got.InstagramAccessToken != "token") {
 				t.Fatalf("Instagram config = %#v", got)
+			}
+			if tt.wantUser2 != "" && got.InstagramUser2AccountID != tt.wantUser2 {
+				t.Fatalf("InstagramUser2AccountID = %q, want %q", got.InstagramUser2AccountID, tt.wantUser2)
+			}
+			if tt.wantAppID != "" && got.AppID != tt.wantAppID {
+				t.Fatalf("AppID = %q, want %q", got.AppID, tt.wantAppID)
+			}
+			if tt.wantAppSecret != "" && got.AppSecret != tt.wantAppSecret {
+				t.Fatalf("AppSecret = %q, want %q", got.AppSecret, tt.wantAppSecret)
 			}
 
 		})

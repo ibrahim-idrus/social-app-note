@@ -29,7 +29,11 @@ func (api *API) instagramWebhookVerify(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) processInstagramText(ctx context.Context, recipient, sender, messageID, text string, fallback bool) error {
-	log.Printf("instagram webhook dispatch recipientID=%q messageID=%q", recipient, messageID)
+	// ID contract: recipient is the dedicated inbox, sender is the user.
+	// Only recipient resolves the inbox (ProcessInstagramDM + owner lookup);
+	// sender resolves the identity via platform_user_id and is never used
+	// to find the inbox.
+	log.Printf("instagram webhook dispatch recipientID=%q senderID=%q dedicatedID=%q user2ID=%q messageID=%q", recipient, sender, api.instagramAccountID, api.instagramUser2AccountID, messageID)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	outcome, err := store.ProcessInstagramDM(ctx, api.db, recipient, sender, messageID, text, now)
 	if err != nil {
@@ -38,6 +42,7 @@ func (api *API) processInstagramText(ctx context.Context, recipient, sender, mes
 	if outcome.Kind == store.InstagramDMUnmatched && fallback {
 		ownerID, err := store.InstagramIntegrationOwnerID(ctx, api.db, recipient)
 		if errors.Is(err, sql.ErrNoRows) {
+			log.Printf("instagram inbox lookup ErrNoRows recipientID=%q dedicatedID=%q: no active integration row; senderID=%q is never used for inbox lookup", recipient, api.instagramAccountID, sender)
 			return nil
 		}
 		if err != nil {
@@ -100,9 +105,14 @@ func (api *API) instagramWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, entry := range payload.Entry {
 		for _, event := range entry.Messaging {
-			log.Printf("instagram webhook received entry.id=%q recipient.id=%q messageID=%q", entry.ID, event.Recipient.ID, event.Message.MID)
+			log.Printf("instagram webhook received entry.id=%q sender.id=%q recipient.id=%q dedicatedID=%q user2ID=%q messageID=%q", entry.ID, event.Sender.ID, event.Recipient.ID, api.instagramAccountID, api.instagramUser2AccountID, event.Message.MID)
 			if event.Message.IsEcho || event.Message.Text == "" || event.Message.MID == "" || event.Sender.ID == "" || event.Recipient.ID == "" || event.Sender.ID == event.Recipient.ID {
 				continue
+			}
+			if api.instagramAccountID != "" && event.Recipient.ID != api.instagramAccountID {
+				log.Printf("instagram webhook recipient mismatch recipientID=%q dedicatedID=%q senderID=%q: routing by recipient via integration lookup, sender never used for inbox", event.Recipient.ID, api.instagramAccountID, event.Sender.ID)
+			} else {
+				log.Printf("instagram webhook recipient matched recipientID=%q dedicatedID=%q senderID=%q", event.Recipient.ID, api.instagramAccountID, event.Sender.ID)
 			}
 			if err := api.processInstagramText(r.Context(), event.Recipient.ID, event.Sender.ID, event.Message.MID, event.Message.Text, true); err != nil {
 				writeError(w, http.StatusInternalServerError, "internal_error")

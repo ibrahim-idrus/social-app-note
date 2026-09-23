@@ -18,6 +18,13 @@ type Config struct {
 	InstagramAppID, InstagramAppSecret                      string
 	InstagramDedicatedAccountID, InstagramDedicatedUsername string
 	InstagramWebhookVerifyToken, InstagramAccessToken       string
+	// Optional trace aid only: expected DM sender (test account). Never used
+	// for inbox lookup; sender identity resolves via platform_user_id.
+	InstagramUser2AccountID string
+	// Preserved Meta App credentials (bare keys). Loaded so valid
+	// configuration starts; not wired into webhook/OAuth behavior, which
+	// uses the INSTAGRAM_APP_* keys.
+	AppID, AppSecret string
 }
 
 const instagramPermissions = "instagram_business_basic,instagram_business_manage_messages"
@@ -32,6 +39,17 @@ var supported = map[string]bool{
 	"INSTAGRAM_WEBHOOK_VERIFY_TOKEN": true, "INSTAGRAM_ACCESS_TOKEN": true,
 	"INSTAGRAM_PERMISSIONS":       true,
 	"INSTAGRAM_INBOX_OWNER_EMAIL": true,
+	"INSTAGRAM_USER2_ACCOUNT_ID":  true,
+	"APP_ID":                      true,
+	"APP_SECRET":                  true,
+	// Accepted-and-ignored legacy keys: kept so existing .env files load.
+	// No poller exists (webhook-only inbound, see main_test.go), user tokens
+	// are unused (only the dedicated token calls the API), and USER1 is
+	// obsolete. None of these affect behavior.
+	"INSTAGRAM_POLL_INTERVAL_SECONDS": true,
+	"INSTAGRAM_ACCESS_USER2_TOKEN":    true,
+	"INSTAGRAM_USER1_ACCOUNT_ID":      true,
+	"INSTAGRAM_ACCESS_USER1_TOKEN":    true,
 }
 
 func Load(path string) (Config, error) {
@@ -128,5 +146,7 @@ func Load(path string) (Config, error) {
 		InstagramDedicatedAccountID: values["INSTAGRAM_DEDICATED_ACCOUNT_ID"], InstagramDedicatedUsername: values["INSTAGRAM_DEDICATED_USERNAME"],
 		InstagramWebhookVerifyToken: values["INSTAGRAM_WEBHOOK_VERIFY_TOKEN"], InstagramAccessToken: values["INSTAGRAM_ACCESS_TOKEN"],
 		InstagramInboxOwnerEmail: values["INSTAGRAM_INBOX_OWNER_EMAIL"],
+		InstagramUser2AccountID:  values["INSTAGRAM_USER2_ACCOUNT_ID"],
+		AppID:                    values["APP_ID"], AppSecret: values["APP_SECRET"],
 	}, nil
 }
