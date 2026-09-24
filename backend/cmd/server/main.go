@@ -37,7 +37,7 @@ func main() {
 		log.Fatal(err)
 	}
 	if err := store.ConfigureInstagramIntegrationOwner(context.Background(), db, cfg.InstagramDedicatedAccountID, cfg.InstagramInboxOwnerEmail); err != nil {
-		log.Fatal(err)
+		log.Printf("instagram inbox owner unavailable: %v", err)
 	}
 
 	server := &http.Server{
