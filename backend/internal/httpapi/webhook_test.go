@@ -1,9 +1,11 @@
 package httpapi
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -101,6 +103,75 @@ func TestInstagramWebhookSavesUnmatchedTextToInboxOwner(t *testing.T) {
 	err := c.db.QueryRow(`SELECT source, external_message_id, content_markdown FROM notes`).Scan(&source, &externalID, &content)
 	if w.Code != http.StatusOK || err != nil || source != "instagram" || externalID != "mid-unmatched" || content != "instagram e2e" {
 		t.Fatalf("status=%d source=%q external=%q content=%q err=%v", w.Code, source, externalID, content, err)
+	}
+}
+
+func TestInstagramWebhookSavesChangeTextToInboxOwner(t *testing.T) {
+	_, c := webhookHandler(t, "verify", "app-secret")
+	c.register(t, "Inbox Owner", "owner@example.com")
+	if _, err := c.db.Exec(`UPDATE instagram_integrations SET owner_user_id=(SELECT id FROM users WHERE email='owner@example.com') WHERE instagram_user_id='inbox'`); err != nil {
+		t.Fatal(err)
+	}
+	payload := `{"object":"instagram","entry":[{"id":"inbox","changes":[{"field":"messages","value":{"sender":{"id":"sender-change"},"recipient":{"id":"inbox"},"message":{"mid":"mid-change","text":"change payload"}}}]}]}`
+	r := httptest.NewRequest(http.MethodPost, "/api/integrations/instagram/webhook", strings.NewReader(payload))
+	r.Header.Set("X-Hub-Signature-256", signWebhook("app-secret", []byte(payload)))
+	w := httptest.NewRecorder()
+	c.handler.ServeHTTP(w, r)
+	var source, externalID, content string
+	err := c.db.QueryRow(`SELECT source, external_message_id, content_markdown FROM notes`).Scan(&source, &externalID, &content)
+	if w.Code != http.StatusOK || err != nil || source != "instagram" || externalID != "mid-change" || content != "change payload" {
+		t.Fatalf("status=%d source=%q external=%q content=%q err=%v", w.Code, source, externalID, content, err)
+	}
+}
+
+func TestInstagramWebhookLogsSafeReceiptAndResults(t *testing.T) {
+	h, _ := webhookHandler(t, "verify", "app-secret")
+	oldWriter, oldFlags, oldPrefix := log.Writer(), log.Flags(), log.Prefix()
+	var logs bytes.Buffer
+	log.SetOutput(&logs)
+	log.SetFlags(0)
+	log.SetPrefix("")
+	t.Cleanup(func() {
+		log.SetOutput(oldWriter)
+		log.SetFlags(oldFlags)
+		log.SetPrefix(oldPrefix)
+	})
+
+	for _, tc := range []struct {
+		name, body, signature string
+		wantStatus            int
+		wantLogs              []string
+	}{
+		{"invalid signature", `signature-secret-message`, "sha256=nope", http.StatusForbidden, []string{"instagram webhook receipt", "result=signature_invalid"}},
+		{"malformed json", `{"private-message":`, signWebhook("app-secret", []byte(`{"private-message":`)), http.StatusBadRequest, []string{"instagram webhook receipt", "result=malformed_json"}},
+		{"ignored echo", `{"object":"instagram","entry":[{"id":"raw-entry-id","messaging":[{"sender":{"id":"raw-sender-id"},"recipient":{"id":"raw-recipient-id"},"message":{"mid":"raw-mid","text":"private-message","is_echo":true}}]}]}`, "", http.StatusOK, []string{"instagram webhook receipt", "result=ok", "ignored=1", "echo=1"}},
+		{"change metadata", `{"object":"instagram","entry":[{"id":"raw-entry-id","changes":[{"field":"messages","value":{"sender":{"id":"raw-sender-id"},"recipient":{"id":"raw-recipient-id"},"message":{"mid":"raw-mid","text":"private-message"}}}]}]}`, "", http.StatusOK, []string{"change field=messages", "event type=text", "result=ok object=instagram entries=1 changes=1 events=1 processed=1"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			logs.Reset()
+			signature := tc.signature
+			if signature == "" {
+				signature = signWebhook("app-secret", []byte(tc.body))
+			}
+			r := httptest.NewRequest(http.MethodPost, "/api/integrations/instagram/webhook", strings.NewReader(tc.body))
+			r.Header.Set("X-Hub-Signature-256", signature)
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+			if w.Code != tc.wantStatus {
+				t.Fatalf("status=%d body=%q", w.Code, w.Body.String())
+			}
+			got := logs.String()
+			for _, want := range tc.wantLogs {
+				if !strings.Contains(got, want) {
+					t.Errorf("logs missing %q: %s", want, got)
+				}
+			}
+			for _, secret := range []string{"signature-secret-message", "private-message", "raw-entry-id", "raw-sender-id", "raw-recipient-id", "raw-mid", "app-secret"} {
+				if strings.Contains(got, secret) {
+					t.Errorf("logs exposed %q: %s", secret, got)
+				}
+			}
+		})
 	}
 }
 

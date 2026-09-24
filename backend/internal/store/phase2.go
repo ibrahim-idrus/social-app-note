@@ -253,10 +253,10 @@ func ProcessInstagramDM(ctx context.Context, db *sql.DB, recipientID, senderID, 
 		return InstagramDMOutcome{}, err
 	}
 	if !recipientExists {
-		log.Printf("instagram dm integration unmatched recipientID=%q senderID=%q: no active integration row", recipientID, senderID)
+		log.Printf("instagram dm integration result=unmatched")
 		return commitInstagramDMOutcome(tx, InstagramDMOutcome{Kind: InstagramDMUnmatched})
 	}
-	log.Printf("instagram dm integration matched recipientID=%q senderID=%q status=active", recipientID, senderID)
+	log.Printf("instagram dm integration result=matched status=active")
 
 	codeHash := sha256.Sum256([]byte(text))
 	var identityID, userID int64
@@ -286,7 +286,7 @@ func ProcessInstagramDM(ctx context.Context, db *sql.DB, recipientID, senderID, 
 		if count == 0 {
 			kind = InstagramDMDuplicate
 		} else {
-			log.Printf("instagram dm note inserted recipientID=%q senderID=%q externalMessageID=%q socialIdentityID=%d", recipientID, senderID, externalMessageID, identityID)
+			log.Printf("instagram dm note result=inserted")
 		}
 		return commitInstagramDMOutcome(tx, InstagramDMOutcome{Kind: kind, IdentityID: identityID})
 	}
@@ -383,7 +383,7 @@ func SaveInstagramInboxNote(ctx context.Context, db *sql.DB, ownerID int64, send
 		return false, err
 	}
 	if count == 1 {
-		log.Printf("instagram inbox note inserted externalMessageID=%q ownerID=%d", messageID, ownerID)
+		log.Printf("instagram inbox note result=inserted")
 	}
 	return count == 1, nil
 }

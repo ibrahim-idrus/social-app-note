@@ -12,11 +12,26 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
 	"social-notes/backend/internal/store"
 )
+
+type instagramWebhookEvent struct {
+	Sender struct {
+		ID string `json:"id"`
+	} `json:"sender"`
+	Recipient struct {
+		ID string `json:"id"`
+	} `json:"recipient"`
+	Message struct {
+		MID    string `json:"mid"`
+		Text   string `json:"text"`
+		IsEcho bool   `json:"is_echo"`
+	} `json:"message"`
+}
 
 func (api *API) instagramWebhookVerify(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
@@ -33,7 +48,7 @@ func (api *API) processInstagramText(ctx context.Context, recipient, sender, mes
 	// Only recipient resolves the inbox (ProcessInstagramDM + owner lookup);
 	// sender resolves the identity via platform_user_id and is never used
 	// to find the inbox.
-	log.Printf("instagram webhook dispatch recipientID=%q senderID=%q dedicatedID=%q user2ID=%q messageID=%q", recipient, sender, api.instagramAccountID, api.instagramUser2AccountID, messageID)
+	log.Printf("instagram webhook dispatch recipient=%s sender=%s configured_recipient=%s configured_user2=%s message=%s", webhookID(recipient), webhookID(sender), webhookID(api.instagramAccountID), webhookID(api.instagramUser2AccountID), webhookID(messageID))
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	outcome, err := store.ProcessInstagramDM(ctx, api.db, recipient, sender, messageID, text, now)
 	if err != nil {
@@ -42,7 +57,7 @@ func (api *API) processInstagramText(ctx context.Context, recipient, sender, mes
 	if outcome.Kind == store.InstagramDMUnmatched && fallback {
 		ownerID, err := store.InstagramIntegrationOwnerID(ctx, api.db, recipient)
 		if errors.Is(err, sql.ErrNoRows) {
-			log.Printf("instagram inbox lookup ErrNoRows recipientID=%q dedicatedID=%q: no active integration row; senderID=%q is never used for inbox lookup", recipient, api.instagramAccountID, sender)
+			log.Printf("instagram inbox lookup result=no_integration recipient=%s configured_recipient=%s sender=%s", webhookID(recipient), webhookID(api.instagramAccountID), webhookID(sender))
 			return nil
 		}
 		if err != nil {
@@ -59,13 +74,23 @@ func (api *API) processInstagramText(ctx context.Context, recipient, sender, mes
 }
 
 func (api *API) instagramWebhook(w http.ResponseWriter, r *http.Request) {
+	log.Printf("instagram webhook receipt")
+	result, object := "unknown", "unknown"
+	entryCount, changeCount, eventCount, processed, failed, ignored := 0, 0, 0, 0, 0, 0
+	reasons := map[string]int{}
+	defer func() {
+		log.Printf("instagram webhook result=%s object=%s entries=%d changes=%d events=%d processed=%d failed=%d ignored=%d reasons=%q", result, object, entryCount, changeCount, eventCount, processed, failed, ignored, webhookReasons(reasons))
+	}()
+
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBodyBytes))
 	if err != nil {
+		result = "body_read_error"
 		writeError(w, http.StatusBadRequest, "invalid_input")
 		return
 	}
 	signature := r.Header.Get("X-Hub-Signature-256")
 	if api.instagramAppSecret == "" || !strings.HasPrefix(signature, "sha256=") {
+		result = "signature_invalid"
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -73,52 +98,116 @@ func (api *API) instagramWebhook(w http.ResponseWriter, r *http.Request) {
 	mac := hmac.New(sha256.New, []byte(api.instagramAppSecret))
 	_, _ = mac.Write(body)
 	if err != nil || len(got) != sha256.Size || !hmac.Equal(got, mac.Sum(nil)) {
+		result = "signature_invalid"
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 	var payload struct {
 		Object string `json:"object"`
 		Entry  []struct {
-			ID        string `json:"id"`
-			Messaging []struct {
-				Sender struct {
-					ID string `json:"id"`
-				} `json:"sender"`
-				Recipient struct {
-					ID string `json:"id"`
-				} `json:"recipient"`
-				Message struct {
-					MID    string `json:"mid"`
-					Text   string `json:"text"`
-					IsEcho bool   `json:"is_echo"`
-				} `json:"message"`
-			} `json:"messaging"`
+			ID        string                  `json:"id"`
+			Messaging []instagramWebhookEvent `json:"messaging"`
+			Changes   []struct {
+				Field string                `json:"field"`
+				Value instagramWebhookEvent `json:"value"`
+			} `json:"changes"`
 		} `json:"entry"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
+		result = "malformed_json"
 		writeError(w, http.StatusBadRequest, "invalid_input")
 		return
 	}
+	object = webhookName(payload.Object)
+	entryCount = len(payload.Entry)
+	for _, entry := range payload.Entry {
+		changeCount += len(entry.Changes)
+		eventCount += len(entry.Messaging)
+	}
 	if payload.Object != "instagram" {
+		result = "ignored_object"
+		ignored = 1
+		reasons["object"]++
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 	for _, entry := range payload.Entry {
-		for _, event := range entry.Messaging {
-			log.Printf("instagram webhook received entry.id=%q sender.id=%q recipient.id=%q dedicatedID=%q user2ID=%q messageID=%q", entry.ID, event.Sender.ID, event.Recipient.ID, api.instagramAccountID, api.instagramUser2AccountID, event.Message.MID)
-			if event.Message.IsEcho || event.Message.Text == "" || event.Message.MID == "" || event.Sender.ID == "" || event.Recipient.ID == "" || event.Sender.ID == event.Recipient.ID {
+		events := entry.Messaging
+		for _, change := range entry.Changes {
+			log.Printf("instagram webhook change field=%s", webhookName(change.Field))
+			if change.Field != "messages" {
+				ignored++
+				reasons["unsupported_field"]++
 				continue
 			}
-			if api.instagramAccountID != "" && event.Recipient.ID != api.instagramAccountID {
-				log.Printf("instagram webhook recipient mismatch recipientID=%q dedicatedID=%q senderID=%q: routing by recipient via integration lookup, sender never used for inbox", event.Recipient.ID, api.instagramAccountID, event.Sender.ID)
-			} else {
-				log.Printf("instagram webhook recipient matched recipientID=%q dedicatedID=%q senderID=%q", event.Recipient.ID, api.instagramAccountID, event.Sender.ID)
+			events = append(events, change.Value)
+			eventCount++
+		}
+		for _, event := range events {
+			reason := instagramWebhookIgnoreReason(event)
+			if reason != "" {
+				ignored++
+				reasons[reason]++
+				continue
 			}
+			log.Printf("instagram webhook event type=text entry=%s sender=%s recipient=%s message=%s", webhookID(entry.ID), webhookID(event.Sender.ID), webhookID(event.Recipient.ID), webhookID(event.Message.MID))
 			if err := api.processInstagramText(r.Context(), event.Recipient.ID, event.Sender.ID, event.Message.MID, event.Message.Text, true); err != nil {
+				failed++
+				result = "processing_failed"
 				writeError(w, http.StatusInternalServerError, "internal_error")
 				return
 			}
+			processed++
 		}
 	}
+	result = "ok"
 	w.WriteHeader(http.StatusOK)
+}
+
+func instagramWebhookIgnoreReason(event instagramWebhookEvent) string {
+	switch {
+	case event.Message.IsEcho:
+		return "echo"
+	case event.Message.Text == "":
+		return "missing_text"
+	case event.Message.MID == "":
+		return "missing_message_id"
+	case event.Sender.ID == "":
+		return "missing_sender"
+	case event.Recipient.ID == "":
+		return "missing_recipient"
+	case event.Sender.ID == event.Recipient.ID:
+		return "same_sender_recipient"
+	default:
+		return ""
+	}
+}
+
+func webhookID(id string) string {
+	if id == "" {
+		return "none"
+	}
+	sum := sha256.Sum256([]byte(id))
+	return hex.EncodeToString(sum[:6])
+}
+
+func webhookName(name string) string {
+	if name == "" {
+		return "none"
+	}
+	if len(name) > 40 || strings.IndexFunc(name, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-' || r == '.')
+	}) >= 0 {
+		return "other"
+	}
+	return name
+}
+
+func webhookReasons(reasons map[string]int) string {
+	parts := make([]string, 0, len(reasons))
+	for reason, count := range reasons {
+		parts = append(parts, fmt.Sprintf("%s=%d", reason, count))
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, ",")
 }
