@@ -88,6 +88,7 @@ func (api *API) instagramWebhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_input")
 		return
 	}
+	log.Printf("instagram webhook body=%s", body)
 	signature := r.Header.Get("X-Hub-Signature-256")
 	if api.instagramAppSecret == "" || !strings.HasPrefix(signature, "sha256=") {
 		result = "signature_invalid"
@@ -118,7 +119,6 @@ func (api *API) instagramWebhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_input")
 		return
 	}
-	log.Printf("instagram webhook body=%s", body)
 	object = webhookName(payload.Object)
 	entryCount = len(payload.Entry)
 	for _, entry := range payload.Entry {
