@@ -144,6 +144,7 @@ func (api *API) instagramWebhook(w http.ResponseWriter, r *http.Request) {
 			eventCount++
 		}
 		for _, event := range events {
+			recordDebugWebhookIDs(entry.ID, event.Sender.ID, event.Recipient.ID, event.Message.MID) // TEMPORARY DEBUG CODE: in-memory only, no behavior change.
 			reason := instagramWebhookIgnoreReason(event)
 			if reason != "" {
 				ignored++
@@ -184,8 +185,11 @@ func instagramWebhookIgnoreReason(event instagramWebhookEvent) string {
 }
 
 func webhookID(id string) string {
-	// ponytail: temporary raw-ID debug to capture real IGSID, revert to hash after.
-	return id
+	if id == "" {
+		return "none"
+	}
+	sum := sha256.Sum256([]byte(id))
+	return hex.EncodeToString(sum[:6])
 }
 
 func webhookName(name string) string {

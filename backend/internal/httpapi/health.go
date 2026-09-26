@@ -59,6 +59,8 @@ func Handler(db *sql.DB, options ...Options) http.Handler {
 	mux.HandleFunc("POST /api/integrations/instagram/simulated-dm", api.simulatedInstagramDM)
 	mux.HandleFunc("GET /api/integrations/instagram/webhook", api.instagramWebhookVerify)
 	mux.HandleFunc("POST /api/integrations/instagram/webhook", api.instagramWebhook)
+	// TEMPORARY DEBUG CODE - remove with debug_ids.go.
+	mux.HandleFunc("GET /api/integrations/instagram/debug/ids", api.authenticated(api.instagramDebugIDs, false))
 	mux.HandleFunc("GET /api/notes", api.authenticated(api.listNotes, false))
 	mux.HandleFunc("POST /api/notes", api.authenticated(api.createNote, true))
 	mux.HandleFunc("GET /api/notes/{id}", api.authenticated(api.getNote, false))
