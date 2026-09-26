@@ -142,7 +142,7 @@ func TestInstagramWebhookLogsSafeReceiptAndResults(t *testing.T) {
 		wantStatus            int
 		wantLogs              []string
 	}{
-		{"invalid signature", `signature-secret-message`, "sha256=nope", http.StatusForbidden, []string{"instagram webhook receipt", "result=signature_invalid"}},
+		{"invalid signature", `invalid-signature-body`, "sha256=nope", http.StatusForbidden, []string{"instagram webhook receipt", "instagram webhook body=invalid-signature-body", "result=signature_invalid"}},
 		{"malformed json", `{"private-message":`, signWebhook("app-secret", []byte(`{"private-message":`)), http.StatusBadRequest, []string{"instagram webhook receipt", "result=malformed_json"}},
 		{"ignored echo", `{"object":"instagram","entry":[{"id":"raw-entry-id","messaging":[{"sender":{"id":"raw-sender-id"},"recipient":{"id":"raw-recipient-id"},"message":{"mid":"raw-mid","text":"private-message","is_echo":true}}]}]}`, "", http.StatusOK, []string{"instagram webhook receipt", "result=ok", "ignored=1", "echo=1"}},
 		{"change metadata", `{"object":"instagram","entry":[{"id":"raw-entry-id","changes":[{"field":"messages","value":{"sender":{"id":"raw-sender-id"},"recipient":{"id":"raw-recipient-id"},"message":{"mid":"raw-mid","text":"private-message"}}}]}]}`, "", http.StatusOK, []string{"change field=messages", "event type=text", "result=ok object=instagram entries=1 changes=1 events=1 processed=1"}},
@@ -166,7 +166,12 @@ func TestInstagramWebhookLogsSafeReceiptAndResults(t *testing.T) {
 					t.Errorf("logs missing %q: %s", want, got)
 				}
 			}
-			for _, secret := range []string{"signature-secret-message", "private-message", "raw-entry-id", "raw-sender-id", "raw-recipient-id", "raw-mid", "app-secret"} {
+			if tc.wantStatus == http.StatusOK {
+				if !strings.Contains(got, "instagram webhook body=") || !strings.Contains(got, `"object":"instagram"`) || !strings.Contains(got, `"text":"private-message"`) {
+					t.Errorf("logs missing full webhook body: %s", got)
+				}
+			}
+			for _, secret := range []string{"signature-secret-message", "app-secret"} {
 				if strings.Contains(got, secret) {
 					t.Errorf("logs exposed %q: %s", secret, got)
 				}
