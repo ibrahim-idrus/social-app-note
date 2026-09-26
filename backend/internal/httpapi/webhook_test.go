@@ -166,6 +166,13 @@ func TestInstagramWebhookLogsSafeReceiptAndResults(t *testing.T) {
 					t.Errorf("logs missing %q: %s", want, got)
 				}
 			}
+			if tc.wantStatus == http.StatusOK {
+				if !strings.Contains(got, "instagram webhook body=") || !strings.Contains(got, `"object":"instagram"`) || !strings.Contains(got, `"text":"[redacted]"`) {
+					t.Errorf("logs missing redacted webhook body: %s", got)
+				}
+			} else if strings.Contains(got, "instagram webhook body=") {
+				t.Errorf("invalid request logged webhook body: %s", got)
+			}
 			// ponytail: temporary raw-ID debug, raw-* allowed until IGSID captured then revert.
 			for _, secret := range []string{"signature-secret-message", "private-message", "app-secret"} {
 				if strings.Contains(got, secret) {

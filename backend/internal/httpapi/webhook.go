@@ -118,6 +118,9 @@ func (api *API) instagramWebhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_input")
 		return
 	}
+	if redacted, err := redactWebhookBody(body); err == nil {
+		log.Printf("instagram webhook body=%s", redacted)
+	}
 	object = webhookName(payload.Object)
 	entryCount = len(payload.Entry)
 	for _, entry := range payload.Entry {
@@ -162,6 +165,33 @@ func (api *API) instagramWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	result = "ok"
 	w.WriteHeader(http.StatusOK)
+}
+
+func redactWebhookBody(body []byte) (string, error) {
+	var payload any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return "", err
+	}
+	redactWebhookText(payload)
+	redacted, err := json.Marshal(payload)
+	return string(redacted), err
+}
+
+func redactWebhookText(value any) {
+	switch value := value.(type) {
+	case map[string]any:
+		for key, child := range value {
+			if key == "text" {
+				value[key] = "[redacted]"
+				continue
+			}
+			redactWebhookText(child)
+		}
+	case []any:
+		for _, child := range value {
+			redactWebhookText(child)
+		}
+	}
 }
 
 func instagramWebhookIgnoreReason(event instagramWebhookEvent) string {
