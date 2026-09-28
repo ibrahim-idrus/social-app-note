@@ -87,7 +87,7 @@ func TestInstagramWebhookSignatureAndPayloadValidation(t *testing.T) {
 	}
 }
 
-func TestInstagramWebhookSavesUnmatchedTextToInboxOwner(t *testing.T) {
+func TestInstagramWebhookIgnoresUnmatchedSender(t *testing.T) {
 	_, c := webhookHandler(t, "verify", "app-secret")
 	c.register(t, "Inbox Owner", "owner@example.com")
 	if _, err := c.db.Exec(`UPDATE instagram_integrations SET owner_user_id=(SELECT id FROM users WHERE email='owner@example.com') WHERE instagram_user_id='inbox'`); err != nil {
@@ -99,14 +99,15 @@ func TestInstagramWebhookSavesUnmatchedTextToInboxOwner(t *testing.T) {
 	r.Header.Set("X-Hub-Signature-256", signWebhook("app-secret", []byte(payload)))
 	w := httptest.NewRecorder()
 	c.handler.ServeHTTP(w, r)
-	var source, externalID, content string
-	err := c.db.QueryRow(`SELECT source, external_message_id, content_markdown FROM notes`).Scan(&source, &externalID, &content)
-	if w.Code != http.StatusOK || err != nil || source != "instagram" || externalID != "mid-unmatched" || content != "instagram e2e" {
-		t.Fatalf("status=%d source=%q external=%q content=%q err=%v", w.Code, source, externalID, content, err)
+	var notes, identities int
+	_ = c.db.QueryRow(`SELECT count(*) FROM notes`).Scan(&notes)
+	_ = c.db.QueryRow(`SELECT count(*) FROM social_identities`).Scan(&identities)
+	if w.Code != http.StatusOK || notes != 0 || identities != 0 {
+		t.Fatalf("status=%d notes=%d identities=%d", w.Code, notes, identities)
 	}
 }
 
-func TestInstagramWebhookSavesChangeTextToInboxOwner(t *testing.T) {
+func TestInstagramWebhookIgnoresUnmatchedChangeText(t *testing.T) {
 	_, c := webhookHandler(t, "verify", "app-secret")
 	c.register(t, "Inbox Owner", "owner@example.com")
 	if _, err := c.db.Exec(`UPDATE instagram_integrations SET owner_user_id=(SELECT id FROM users WHERE email='owner@example.com') WHERE instagram_user_id='inbox'`); err != nil {
@@ -117,10 +118,10 @@ func TestInstagramWebhookSavesChangeTextToInboxOwner(t *testing.T) {
 	r.Header.Set("X-Hub-Signature-256", signWebhook("app-secret", []byte(payload)))
 	w := httptest.NewRecorder()
 	c.handler.ServeHTTP(w, r)
-	var source, externalID, content string
-	err := c.db.QueryRow(`SELECT source, external_message_id, content_markdown FROM notes`).Scan(&source, &externalID, &content)
-	if w.Code != http.StatusOK || err != nil || source != "instagram" || externalID != "mid-change" || content != "change payload" {
-		t.Fatalf("status=%d source=%q external=%q content=%q err=%v", w.Code, source, externalID, content, err)
+	var notes int
+	_ = c.db.QueryRow(`SELECT count(*) FROM notes`).Scan(&notes)
+	if w.Code != http.StatusOK || notes != 0 {
+		t.Fatalf("status=%d notes=%d", w.Code, notes)
 	}
 }
 
@@ -142,7 +143,7 @@ func TestInstagramWebhookLogsSafeReceiptAndResults(t *testing.T) {
 		wantStatus            int
 		wantLogs              []string
 	}{
-		{"invalid signature", `invalid-signature-body`, "sha256=nope", http.StatusForbidden, []string{"instagram webhook receipt", "instagram webhook body=invalid-signature-body", "result=signature_invalid"}},
+		{"invalid signature", `invalid-signature-body`, "sha256=nope", http.StatusForbidden, []string{"instagram webhook receipt", "result=signature_invalid"}},
 		{"malformed json", `{"private-message":`, signWebhook("app-secret", []byte(`{"private-message":`)), http.StatusBadRequest, []string{"instagram webhook receipt", "result=malformed_json"}},
 		{"ignored echo", `{"object":"instagram","entry":[{"id":"raw-entry-id","messaging":[{"sender":{"id":"raw-sender-id"},"recipient":{"id":"raw-recipient-id"},"message":{"mid":"raw-mid","text":"private-message","is_echo":true}}]}]}`, "", http.StatusOK, []string{"instagram webhook receipt", "result=ok", "ignored=1", "echo=1"}},
 		{"change metadata", `{"object":"instagram","entry":[{"id":"raw-entry-id","changes":[{"field":"messages","value":{"sender":{"id":"raw-sender-id"},"recipient":{"id":"raw-recipient-id"},"message":{"mid":"raw-mid","text":"private-message"}}}]}]}`, "", http.StatusOK, []string{"change field=messages", "event type=text", "result=ok object=instagram entries=1 changes=1 events=1 processed=1"}},
@@ -166,12 +167,7 @@ func TestInstagramWebhookLogsSafeReceiptAndResults(t *testing.T) {
 					t.Errorf("logs missing %q: %s", want, got)
 				}
 			}
-			if tc.wantStatus == http.StatusOK {
-				if !strings.Contains(got, "instagram webhook body=") || !strings.Contains(got, `"object":"instagram"`) || !strings.Contains(got, `"text":"private-message"`) {
-					t.Errorf("logs missing full webhook body: %s", got)
-				}
-			}
-			for _, secret := range []string{"signature-secret-message", "app-secret"} {
+			for _, secret := range []string{"private-message", "invalid-signature-body", "raw-sender-id", "raw-recipient-id", "raw-mid", "signature-secret-message", "app-secret"} {
 				if strings.Contains(got, secret) {
 					t.Errorf("logs exposed %q: %s", secret, got)
 				}
@@ -180,7 +176,7 @@ func TestInstagramWebhookLogsSafeReceiptAndResults(t *testing.T) {
 	}
 }
 
-func TestInstagramWebhookRoutesDedicatedRecipientAndUser2Sender(t *testing.T) {
+func TestInstagramWebhookDoesNotTrustConfiguredUser2WithoutVerification(t *testing.T) {
 	db, err := store.Open(filepath.Join(t.TempDir(), "sqlite.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -198,10 +194,10 @@ func TestInstagramWebhookRoutesDedicatedRecipientAndUser2Sender(t *testing.T) {
 	r.Header.Set("X-Hub-Signature-256", signWebhook("app-secret", []byte(payload)))
 	w := httptest.NewRecorder()
 	c.handler.ServeHTTP(w, r)
-	var source, externalID, content, title string
-	err = c.db.QueryRow(`SELECT source, external_message_id, content_markdown, title FROM notes`).Scan(&source, &externalID, &content, &title)
-	if w.Code != http.StatusOK || err != nil || source != "instagram" || externalID != "mid-user2" || content != "hello inbox" || !strings.Contains(title, "17841421563711996") {
-		t.Fatalf("status=%d source=%q external=%q content=%q title=%q err=%v", w.Code, source, externalID, content, title, err)
+	var notes int
+	err = c.db.QueryRow(`SELECT count(*) FROM notes`).Scan(&notes)
+	if w.Code != http.StatusOK || err != nil || notes != 0 {
+		t.Fatalf("status=%d notes=%d err=%v", w.Code, notes, err)
 	}
 }
 
@@ -231,7 +227,7 @@ func TestInstagramWebhookIgnoresEventsOutsideConfiguredInbox(t *testing.T) {
 	}
 }
 
-func TestInstagramWebhookPassesWebhookRecipientToIntegrationLookup(t *testing.T) {
+func TestInstagramWebhookRecipientMatchDoesNotBypassSenderVerification(t *testing.T) {
 	_, c := webhookHandler(t, "verify", "app-secret")
 	c.register(t, "Inbox Owner", "owner@example.com")
 	if _, err := c.db.Exec(`UPDATE instagram_integrations SET instagram_user_id='17841426326903892', owner_user_id=(SELECT id FROM users WHERE email='owner@example.com')`); err != nil {
@@ -242,9 +238,9 @@ func TestInstagramWebhookPassesWebhookRecipientToIntegrationLookup(t *testing.T)
 	r.Header.Set("X-Hub-Signature-256", signWebhook("app-secret", []byte(payload)))
 	w := httptest.NewRecorder()
 	c.handler.ServeHTTP(w, r)
-	var externalID string
-	if err := c.db.QueryRow(`SELECT external_message_id FROM notes`).Scan(&externalID); w.Code != http.StatusOK || err != nil || externalID != "real-recipient" {
-		t.Fatalf("status=%d external=%q err=%v", w.Code, externalID, err)
+	var notes int
+	if err := c.db.QueryRow(`SELECT count(*) FROM notes`).Scan(&notes); w.Code != http.StatusOK || err != nil || notes != 0 {
+		t.Fatalf("status=%d notes=%d err=%v", w.Code, notes, err)
 	}
 }
 

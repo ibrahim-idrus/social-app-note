@@ -16,6 +16,8 @@
 
 	let waitingFor = $state<Set<number>>(new Set());
 	let pollTimer: ReturnType<typeof setInterval> | undefined;
+	let clockTimer: ReturnType<typeof setInterval> | undefined;
+	let now = $state(Date.now());
 	let polling = false;
 	let availablePlatforms = $derived(platforms.filter((platform) => !identities.some((identity) => identity.platform === platform.id)));
 	const terminalStates = new Set<SocialIdentity['verification_state']>(['active', 'invalid_code', 'expired', 'system_failure']);
@@ -80,9 +82,16 @@
 	}
 	function stopPolling() {
 		if (pollTimer) clearInterval(pollTimer);
+		if (clockTimer) clearInterval(clockTimer);
 		pollTimer = undefined;
+		clockTimer = undefined;
 	}
-	onMount(() => { void load(); return stopPolling; });
+	function timeRemaining(expiry?: string) {
+		if (!expiry) return 'Code expiry unavailable';
+		const seconds = Math.max(0, Math.ceil((new Date(expiry).getTime() - now) / 1000));
+		return seconds ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} remaining` : 'Code expired';
+	}
+	onMount(() => { void load(); clockTimer = setInterval(() => now = Date.now(), 1000); return stopPolling; });
 </script>
 <svelte:head><title>Settings · NoteDesk</title></svelte:head>
 <div class="page page-narrow">
@@ -105,7 +114,7 @@
 					{#each identities as identity (identity.id)}
 						<div class="platform-title"><span class="platform-icon"><MessageCircle size={20} /></span><div><strong>{platforms.find((platform) => platform.id === identity.platform)?.name ?? identity.platform}</strong><p class="field-help">@{identity.username}</p></div></div>
 						{#if identity.verification_state === 'active'}
-							<div class="notice"><strong>✓ Instagram connected</strong><p>@{identity.username}</p></div>
+							<div class="notice"><strong>✓ Instagram connected</strong><p>Only messages from verified @{identity.username} become notes.</p></div>
 						{:else if identity.verification_state === 'expired'}
 							<div class="notice error" role="status"><strong>Your verification code has expired</strong><p>Regenerate it and send the new code to Instagram.</p></div>
 							<Button variant="outline" onclick={() => regenerate(identity)}>Regenerate code</Button>
@@ -121,7 +130,7 @@
 								<div>
 									<p><strong>From your own @{identity.username} account, DM this code to @{(registration?.id === identity.id ? registration.instagram_account : identity.instagram_account)?.username}</strong></p>
 									{#if registration?.id === identity.id}<code>{registration.verification_code}</code>{:else}<p>Your code is hidden after reload.</p>{/if}
-									<p>The code expires after 10 minutes. Regenerate it if needed.</p>
+									<p role="timer">Codes last 10 minutes · {timeRemaining(identity.verification_expires_at)}. Send it before the countdown ends.</p>
 								</div>
 							</div>
 							<Button onclick={() => sent(identity)}>I've sent the code</Button>

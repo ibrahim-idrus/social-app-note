@@ -214,6 +214,12 @@ func TestProcessInstagramDMReturnsVerificationOutcomesAndClaimsReplyAtomically(t
 			if err != nil || outcome.Kind != test.want || outcome.OwnsReply {
 				t.Fatalf("outcome = %#v, err %v", outcome, err)
 			}
+			if test.want == InstagramDMUnmatched {
+				var notes int
+				if err := db.QueryRow(`SELECT count(*) FROM notes`).Scan(&notes); err != nil || notes != 0 {
+					t.Fatalf("unmatched message created %d notes: %v", notes, err)
+				}
+			}
 			var feedback string
 			if err := db.QueryRow(`SELECT verification_result FROM social_identities WHERE id = 1`).Scan(&feedback); err != nil {
 				t.Fatal(err)

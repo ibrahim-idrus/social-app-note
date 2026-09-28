@@ -4,10 +4,8 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -43,27 +41,14 @@ func (api *API) instagramWebhookVerify(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(q.Get("hub.challenge")))
 }
 
-func (api *API) processInstagramText(ctx context.Context, recipient, sender, messageID, text string, fallback bool) error {
+func (api *API) processInstagramText(ctx context.Context, recipient, sender, messageID, text string) error {
 	// ID contract: recipient is the dedicated inbox, sender is the user.
-	// Only recipient resolves the inbox (ProcessInstagramDM + owner lookup);
 	// sender resolves the identity via platform_user_id and is never used
 	// to find the inbox.
 	log.Printf("instagram webhook dispatch recipient=%s sender=%s configured_recipient=%s configured_user2=%s message=%s", webhookID(recipient), webhookID(sender), webhookID(api.instagramAccountID), webhookID(api.instagramUser2AccountID), webhookID(messageID))
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	outcome, err := store.ProcessInstagramDM(ctx, api.db, recipient, sender, messageID, text, now)
 	if err != nil {
-		return err
-	}
-	if outcome.Kind == store.InstagramDMUnmatched && fallback {
-		ownerID, err := store.InstagramIntegrationOwnerID(ctx, api.db, recipient)
-		if errors.Is(err, sql.ErrNoRows) {
-			log.Printf("instagram inbox lookup result=no_integration recipient=%s configured_recipient=%s sender=%s", webhookID(recipient), webhookID(api.instagramAccountID), webhookID(sender))
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		_, err = store.SaveInstagramInboxNote(ctx, api.db, ownerID, sender, messageID, text)
 		return err
 	}
 	if !outcome.OwnsReply {
@@ -88,7 +73,6 @@ func (api *API) instagramWebhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_input")
 		return
 	}
-	log.Printf("instagram webhook body=%s", body)
 	signature := r.Header.Get("X-Hub-Signature-256")
 	if api.instagramAppSecret == "" || !strings.HasPrefix(signature, "sha256=") {
 		result = "signature_invalid"
@@ -145,7 +129,6 @@ func (api *API) instagramWebhook(w http.ResponseWriter, r *http.Request) {
 			eventCount++
 		}
 		for _, event := range events {
-			recordDebugWebhookIDs(entry.ID, event.Sender.ID, event.Recipient.ID, event.Message.MID) // TEMPORARY DEBUG CODE: in-memory only, no behavior change.
 			reason := instagramWebhookIgnoreReason(event)
 			if reason != "" {
 				ignored++
@@ -153,7 +136,7 @@ func (api *API) instagramWebhook(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			log.Printf("instagram webhook event type=text entry=%s sender=%s recipient=%s message=%s", webhookID(entry.ID), webhookID(event.Sender.ID), webhookID(event.Recipient.ID), webhookID(event.Message.MID))
-			if err := api.processInstagramText(r.Context(), event.Recipient.ID, event.Sender.ID, event.Message.MID, event.Message.Text, true); err != nil {
+			if err := api.processInstagramText(r.Context(), event.Recipient.ID, event.Sender.ID, event.Message.MID, event.Message.Text); err != nil {
 				failed++
 				result = "processing_failed"
 				writeError(w, http.StatusInternalServerError, "internal_error")
