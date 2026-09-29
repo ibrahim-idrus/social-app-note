@@ -32,6 +32,7 @@ export function renderMarkdown(markdown: string): string {
 	const lines = markdown.replace(/\r/g, '').split('\n');
 	let inList = false;
 	const html: string[] = [];
+	const slugs = new Map<string, number>();
 	for (const line of lines) {
 		if (/^[-*] /.test(line)) {
 			if (!inList) html.push('<ul>');
@@ -41,13 +42,19 @@ export function renderMarkdown(markdown: string): string {
 		}
 		if (inList) { html.push('</ul>'); inList = false; }
 		if (!line.trim()) continue;
-		const heading = line.match(/^(#{1,3})\s+(.+)$/);
-		if (heading) html.push(`<h${heading[1].length}>${inlineMarkdown(heading[2])}</h${heading[1].length}>`);
-		else if (line.startsWith('> ')) html.push(`<blockquote>${inlineMarkdown(line.slice(2))}</blockquote>`);
+		const heading = line.match(/^(#{1,6})\s+(.+)$/);
+		if (heading) {
+			const base = slugHeading(heading[2]), count = slugs.get(base) ?? 0; slugs.set(base, count + 1);
+			html.push(`<h${heading[1].length} id="${count ? `${base}-${count + 1}` : base}">${inlineMarkdown(heading[2])}</h${heading[1].length}>`);
+		} else if (line.startsWith('> ')) html.push(`<blockquote>${inlineMarkdown(line.slice(2))}</blockquote>`);
 		else html.push(`<p>${inlineMarkdown(line)}</p>`);
 	}
 	if (inList) html.push('</ul>');
 	return html.join('');
+}
+
+export function slugHeading(value: string) {
+	return value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '');
 }
 
 export const formatDate = (value: string) => new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value));

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { ApiError, createApiClient } from '../src/lib/api.ts';
-import { renderMarkdown } from '../src/lib/app-utils.ts';
+import { renderMarkdown, slugHeading } from '../src/lib/app-utils.ts';
 
 test('notes search, filtering, sorting, and pagination are sent to the backend', async () => {
 	let request: Request | undefined;
@@ -11,9 +11,9 @@ test('notes search, filtering, sorting, and pagination are sent to the backend',
 		return Response.json({ notes: [], total: 0, page: 3, page_size: 5 });
 	});
 
-	await api.listNotes({ query: 'camera kit', source: 'instagram', sort: 'title', order: 'asc', page: 3, pageSize: 5 });
+	await api.listNotes({ query: 'camera kit', searchIn: 'content', source: 'instagram', sort: 'relevance', order: 'desc', page: 3, pageSize: 5 });
 	const url = new URL(request!.url);
-	assert.deepEqual(Object.fromEntries(url.searchParams), { sort: 'title', order: 'asc', page: '3', page_size: '5', q: 'camera kit', source: 'instagram' });
+	assert.deepEqual(Object.fromEntries(url.searchParams), { sort: 'relevance', order: 'desc', page: '3', page_size: '5', q: 'camera kit', search_in: 'content', source: 'instagram' });
 	assert.equal(request?.credentials, 'same-origin');
 });
 
@@ -56,11 +56,16 @@ test('API errors retain status and translate backend error codes', async () => {
 
 test('renders basic markdown without allowing raw HTML or unsafe links', () => {
 	const html = renderMarkdown('# Hello\n\n**Bold** and [safe](https://example.com)\n\n<script>alert(1)</script> [bad](javascript:alert(1))');
-	assert.match(html, /<h1>Hello<\/h1>/);
+	assert.match(html, /<h1 id="hello">Hello<\/h1>/);
 	assert.match(html, /<strong>Bold<\/strong>/);
 	assert.match(html, /href="https:\/\/example.com"/);
 	assert.doesNotMatch(html, /<script>|javascript:/);
 	assert.match(html, /&lt;script&gt;/);
+});
+
+test('heading slugs are stable and duplicates receive suffixes', () => {
+	assert.equal(slugHeading('Hello, 東京 World!'), 'hello-東京-world');
+	assert.match(renderMarkdown('# Same\n# Same'), /id="same"[^]*id="same-2"/);
 });
 
 test('editor initializes the bound textarea ref to the child fallback value', async () => {

@@ -38,12 +38,15 @@ var supported = map[string]bool{
 	"INSTAGRAM_APP_ID":      true, "INSTAGRAM_APP_SECRET": true,
 	"INSTAGRAM_DEDICATED_ACCOUNT_ID": true, "INSTAGRAM_DEDICATED_USERNAME": true,
 	"INSTAGRAM_WEBHOOK_VERIFY_TOKEN": true, "INSTAGRAM_ACCESS_TOKEN": true,
-	"INSTAGRAM_PERMISSIONS":         true,
-	"INSTAGRAM_INBOX_OWNER_EMAIL":   true,
-	"INSTAGRAM_USER2_ACCOUNT_ID":    true,
-	"APP_ID":                        true,
-	"APP_SECRET":                    true,
-	"FACEBOOK_WEBHOOK_VERIFY_TOKEN": true,
+	"INSTAGRAM_PERMISSIONS":            true,
+	"INSTAGRAM_INBOX_OWNER_EMAIL":      true,
+	"INSTAGRAM_USER2_ACCOUNT_ID":       true,
+	"APP_ID":                           true,
+	"APP_SECRET":                       true,
+	"FACEBOOK_WEBHOOK_VERIFY_TOKEN":    true,
+	"MESSENGER_PAGE_ID":                true,
+	"MESSENGER_PAGE_ACCESS_TOKEN":      true,
+	"FACEBOOK_MESSENGER_WEBHOOK_TOKEN": true,
 	// Accepted-and-ignored legacy keys: kept so existing .env files load.
 	// No poller exists (webhook-only inbound, see main_test.go), user tokens
 	// are unused (only the dedicated token calls the API), and USER1 is

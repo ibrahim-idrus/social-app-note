@@ -22,15 +22,17 @@ type Session struct {
 }
 
 type Note struct {
-	ID                int64   `json:"id"`
-	UserID            int64   `json:"-"`
-	SocialIdentityID  *int64  `json:"social_identity_id"`
-	Title             string  `json:"title"`
-	ContentMarkdown   string  `json:"content_markdown"`
-	Source            string  `json:"source"`
-	ExternalMessageID *string `json:"external_message_id"`
-	CreatedAt         string  `json:"created_at"`
-	UpdatedAt         string  `json:"updated_at"`
+	ID                int64               `json:"id"`
+	UserID            int64               `json:"-"`
+	SocialIdentityID  *int64              `json:"social_identity_id"`
+	Title             string              `json:"title"`
+	ContentMarkdown   string              `json:"content_markdown"`
+	Source            string              `json:"source"`
+	ExternalMessageID *string             `json:"external_message_id"`
+	CreatedAt         string              `json:"created_at"`
+	UpdatedAt         string              `json:"updated_at"`
+	TitleMatches      []MatchRange        `json:"title_matches,omitempty"`
+	Sections          []NoteSearchSection `json:"sections,omitempty"`
 }
 
 type NoteList struct {
@@ -137,13 +139,22 @@ func DeleteNote(ctx context.Context, db *sql.DB, userID, id int64) error {
 	return nil
 }
 
-func ListNotes(ctx context.Context, db *sql.DB, userID int64, query, source, sortField, order string, page, pageSize int) (NoteList, error) {
+func ListNotes(ctx context.Context, db *sql.DB, userID int64, query, searchIn, source, sortField, order string, page, pageSize int) (NoteList, error) {
 	where := `user_id = ?`
 	args := []any{userID}
 	if query != "" {
-		where += ` AND (title LIKE ? ESCAPE '\' OR content_markdown LIKE ? ESCAPE '\')`
 		term := "%" + escapeLike(query) + "%"
-		args = append(args, term, term)
+		switch searchIn {
+		case "title":
+			where += ` AND title LIKE ? ESCAPE '\'`
+			args = append(args, term)
+		case "content":
+			where += ` AND content_markdown LIKE ? ESCAPE '\'`
+			args = append(args, term)
+		default:
+			where += ` AND (title LIKE ? ESCAPE '\' OR content_markdown LIKE ? ESCAPE '\')`
+			args = append(args, term, term)
+		}
 	}
 	if source != "" {
 		where += ` AND source = ?`
@@ -153,10 +164,15 @@ func ListNotes(ctx context.Context, db *sql.DB, userID int64, query, source, sor
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM notes WHERE `+where, args...).Scan(&total); err != nil {
 		return NoteList{}, err
 	}
+	orderBy := fmt.Sprintf("%s %s, id %s", sortField, order, order)
+	if query != "" && sortField == "relevance" {
+		orderBy = `CASE WHEN lower(title) = lower(?) THEN 1 WHEN title LIKE ? ESCAPE '\' THEN 2 WHEN title LIKE ? ESCAPE '\' THEN 3 ELSE 4 END, updated_at DESC, id DESC`
+		args = append(args, query, escapeLike(query)+"%", "%"+escapeLike(query)+"%")
+	}
 	args = append(args, pageSize, (page-1)*pageSize)
 	rows, err := db.QueryContext(ctx, fmt.Sprintf(`
 		SELECT id, user_id, social_identity_id, title, content_markdown, source, external_message_id, created_at, updated_at
-		FROM notes WHERE %s ORDER BY %s %s, id %s LIMIT ? OFFSET ?`, where, sortField, order, order), args...)
+		FROM notes WHERE %s ORDER BY %s LIMIT ? OFFSET ?`, where, orderBy), args...)
 	if err != nil {
 		return NoteList{}, err
 	}
@@ -166,6 +182,14 @@ func ListNotes(ctx context.Context, db *sql.DB, userID int64, query, source, sor
 		var note Note
 		if err := rows.Scan(&note.ID, &note.UserID, &note.SocialIdentityID, &note.Title, &note.ContentMarkdown, &note.Source, &note.ExternalMessageID, &note.CreatedAt, &note.UpdatedAt); err != nil {
 			return NoteList{}, err
+		}
+		if query != "" {
+			if searchIn != "content" {
+				note.TitleMatches = matchRanges(note.Title, query)
+			}
+			if searchIn != "title" {
+				note.Sections = searchSections(note.ContentMarkdown, query)
+			}
 		}
 		result.Notes = append(result.Notes, note)
 	}

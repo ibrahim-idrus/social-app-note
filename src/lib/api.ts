@@ -1,4 +1,6 @@
 export type User = { id: number; name: string; email: string; created_at: string; updated_at: string };
+export type MatchRange = { start: number; end: number };
+export type NoteSearchSection = { heading: string; heading_path: string[]; anchor: string; excerpt: string; matches: MatchRange[] };
 export type Note = {
 	id: number;
 	social_identity_id: number | null;
@@ -8,6 +10,8 @@ export type Note = {
 	external_message_id: string | null;
 	created_at: string;
 	updated_at: string;
+	title_matches?: MatchRange[];
+	sections?: NoteSearchSection[];
 };
 export type NotesPage = { notes: Note[]; total: number; page: number; page_size: number };
 export type SocialPlatform = { id: string; name: string; available: boolean; search_enabled: boolean; inbox?: { instagram_user_id: string; username: string } };
@@ -90,9 +94,9 @@ export function createApiClient(fetcher: Fetch = fetch, cookies = () => typeof d
 		login: (input: { email: string; password: string }) => request<{ user: User; csrf_token: string }>('/api/auth/login', { method: 'POST', body: JSON.stringify(input) }),
 		logout: () => request<void>('/api/auth/logout', { method: 'POST' }),
 		profile: async () => (await request<{ user: User }>('/api/profile')).user,
-		listNotes: ({ query = '', source = '', sort = 'updated_at', order = 'desc', page = 1, pageSize = 20 } = {}) => {
+		listNotes: ({ query = '', searchIn = 'all', source = '', sort = 'updated_at', order = 'desc', page = 1, pageSize = 20 } = {}) => {
 			const params = new URLSearchParams({ sort, order, page: String(page), page_size: String(pageSize) });
-			if (query) params.set('q', query);
+			if (query) { params.set('q', query); params.set('search_in', searchIn); }
 			if (source) params.set('source', source);
 			return request<NotesPage>(`/api/notes?${params}`);
 		},

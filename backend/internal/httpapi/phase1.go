@@ -247,26 +247,36 @@ func (api *API) deleteNote(w http.ResponseWriter, r *http.Request, auth authenti
 
 func (api *API) listNotes(w http.ResponseWriter, r *http.Request, auth authentication) {
 	values := r.URL.Query()
-	query := values.Get("q")
+	rawQuery := values.Get("q")
+	query := strings.TrimSpace(rawQuery)
+	searchIn := values.Get("search_in")
+	if searchIn == "" {
+		searchIn = "all"
+	}
 	source := values.Get("source")
 	sortField := values.Get("sort")
 	order := values.Get("order")
 	if sortField == "" {
-		sortField = "updated_at"
+		if query != "" {
+			sortField = "relevance"
+		} else {
+			sortField = "updated_at"
+		}
 	}
 	if order == "" {
 		order = "desc"
 	}
 	page, pageOK := positiveInt(values.Get("page"), 1, 1_000_000)
 	pageSize, sizeOK := positiveInt(values.Get("page_size"), 20, 100)
-	validSort := sortField == "title" || sortField == "created_at" || sortField == "updated_at"
+	validSort := sortField == "title" || sortField == "created_at" || sortField == "updated_at" || (sortField == "relevance" && query != "")
 	validOrder := order == "asc" || order == "desc"
 	validSource := source == "" || source == "manual" || source == "instagram"
-	if len(query) > 200 || !validSource || !validSort || !validOrder || !pageOK || !sizeOK {
+	validSearch := searchIn == "all" || searchIn == "title" || searchIn == "content"
+	if len([]rune(query)) > 200 || !validSearch || (rawQuery != "" && query == "" && values.Has("search_in")) || !validSource || !validSort || !validOrder || !pageOK || !sizeOK {
 		writeError(w, http.StatusBadRequest, "invalid_query")
 		return
 	}
-	result, err := store.ListNotes(r.Context(), api.db, auth.ID, query, source, sortField, order, page, pageSize)
+	result, err := store.ListNotes(r.Context(), api.db, auth.ID, query, searchIn, source, sortField, order, page, pageSize)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error")
 		return

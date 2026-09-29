@@ -298,6 +298,60 @@ func TestNoteListSearchFilterSortPaginationAndValidation(t *testing.T) {
 	}
 }
 
+func TestNoteSearchScopesRankingAndIsolation(t *testing.T) {
+	c := newTestClient(t, false)
+	c.register(t, "Alice", "alice@example.com")
+	for _, note := range []struct{ title, content string }{{"needle", "exact"}, {"Needle prefix", "prefix"}, {"Other needle title", "substring"}, {"Content only", "contains NEEDLE here"}} {
+		if res := c.request(t, http.MethodPost, "/api/notes", map[string]string{"title": note.title, "content_markdown": note.content}, true); res.Code != http.StatusCreated {
+			t.Fatal(res.Body.String())
+		}
+	}
+	b := newTestClientWithHandler(t, c.handler)
+	b.register(t, "Bob", "bob@example.com")
+	if res := b.request(t, http.MethodPost, "/api/notes", map[string]string{"title": "needle private", "content_markdown": "needle"}, true); res.Code != http.StatusCreated {
+		t.Fatal(res.Body.String())
+	}
+	titles := func(path string) []string {
+		t.Helper()
+		res := c.request(t, http.MethodGet, path, nil, false)
+		if res.Code != http.StatusOK {
+			t.Fatalf("GET %s = %d %s", path, res.Code, res.Body.String())
+		}
+		var body struct {
+			Notes []struct {
+				Title string `json:"title"`
+			} `json:"notes"`
+		}
+		if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		result := make([]string, len(body.Notes))
+		for i := range body.Notes {
+			result[i] = body.Notes[i].Title
+		}
+		return result
+	}
+	if got := titles("/api/notes?q=needle&search_in=title&sort=relevance"); strings.Join(got, "|") != "needle|Needle prefix|Other needle title" {
+		t.Fatalf("title scope/ranking = %#v", got)
+	}
+	if got := titles("/api/notes?q=needle&search_in=content&sort=relevance"); strings.Join(got, "|") != "Content only" {
+		t.Fatalf("content scope = %#v", got)
+	}
+	if got := titles("/api/notes?q=needle&search_in=all&sort=relevance"); strings.Contains(strings.Join(got, "|"), "private") {
+		t.Fatalf("search leaked another user's note: %#v", got)
+	}
+}
+
+func TestNoteSearchQueryValidation(t *testing.T) {
+	c := newTestClient(t, false)
+	c.register(t, "Alice", "alice@example.com")
+	for _, path := range []string{"/api/notes?q=x&search_in=invalid", "/api/notes?q=%20%20%20&search_in=title", "/api/notes?q=" + strings.Repeat("x", 201) + "&search_in=all"} {
+		if got := c.request(t, http.MethodGet, path, nil, false).Code; got != http.StatusBadRequest {
+			t.Fatalf("invalid search %q = %d", path, got)
+		}
+	}
+}
+
 func TestNotesAndProfileRequireAuthentication(t *testing.T) {
 	c := newTestClient(t, false)
 	for _, request := range []struct{ method, path string }{

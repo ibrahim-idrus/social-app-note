@@ -141,6 +141,34 @@ func TestSocialIdentityDatabaseConstraints(t *testing.T) {
 	}
 }
 
+func TestListNotesSearchTreatsSpecialCharactersLiterallyAndTotalsNotes(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "sqlite.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO users (id, name, email, password_hash) VALUES (1, 'Alice', 'alice@example.com', 'hash'), (2, 'Bob', 'bob@example.com', 'hash')`); err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range []struct {
+		user           int
+		title, content string
+	}{{1, `% literal`, "percent"}, {1, `_ literal`, "underscore"}, {1, `back\slash`, "slash"}, {1, `Mixed CASE`, "quotes ' work"}, {1, `Unicode 東京`, "unicode"}, {2, `% literal private`, "percent"}} {
+		if _, err := db.Exec(`INSERT INTO notes (user_id, title, content_markdown, source) VALUES (?, ?, ?, 'manual')`, row.user, row.title, row.content); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, query := range []string{"%", "_", `\`, "mixed case", "'", "東京"} {
+		result, err := ListNotes(context.Background(), db, 1, query, "all", "", "updated_at", "desc", 1, 1)
+		if err != nil {
+			t.Fatalf("query %q: %v", query, err)
+		}
+		if result.Total != 1 || len(result.Notes) != 1 {
+			t.Fatalf("query %q returned total=%d notes=%d", query, result.Total, len(result.Notes))
+		}
+	}
+}
+
 func TestProcessInstagramDMReturnsVerificationOutcomesAndClaimsReplyAtomically(t *testing.T) {
 	newPending := func(t *testing.T, consumed bool, expiresAt string) (*sql.DB, string) {
 		t.Helper()
