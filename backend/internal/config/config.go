@@ -18,6 +18,7 @@ type Config struct {
 	InstagramAppID, InstagramAppSecret                      string
 	InstagramDedicatedAccountID, InstagramDedicatedUsername string
 	InstagramWebhookVerifyToken, InstagramAccessToken       string
+	FacebookWebhookVerifyToken                              string
 	// Optional trace aid only: expected DM sender (test account). Never used
 	// for inbox lookup; sender identity resolves via platform_user_id.
 	InstagramUser2AccountID string
@@ -37,11 +38,12 @@ var supported = map[string]bool{
 	"INSTAGRAM_APP_ID":      true, "INSTAGRAM_APP_SECRET": true,
 	"INSTAGRAM_DEDICATED_ACCOUNT_ID": true, "INSTAGRAM_DEDICATED_USERNAME": true,
 	"INSTAGRAM_WEBHOOK_VERIFY_TOKEN": true, "INSTAGRAM_ACCESS_TOKEN": true,
-	"INSTAGRAM_PERMISSIONS":       true,
-	"INSTAGRAM_INBOX_OWNER_EMAIL": true,
-	"INSTAGRAM_USER2_ACCOUNT_ID":  true,
-	"APP_ID":                      true,
-	"APP_SECRET":                  true,
+	"INSTAGRAM_PERMISSIONS":         true,
+	"INSTAGRAM_INBOX_OWNER_EMAIL":   true,
+	"INSTAGRAM_USER2_ACCOUNT_ID":    true,
+	"APP_ID":                        true,
+	"APP_SECRET":                    true,
+	"FACEBOOK_WEBHOOK_VERIFY_TOKEN": true,
 	// Accepted-and-ignored legacy keys: kept so existing .env files load.
 	// No poller exists (webhook-only inbound, see main_test.go), user tokens
 	// are unused (only the dedicated token calls the API), and USER1 is
@@ -145,8 +147,9 @@ func Load(path string) (Config, error) {
 		InstagramAppID:      values["INSTAGRAM_APP_ID"], InstagramAppSecret: values["INSTAGRAM_APP_SECRET"],
 		InstagramDedicatedAccountID: values["INSTAGRAM_DEDICATED_ACCOUNT_ID"], InstagramDedicatedUsername: values["INSTAGRAM_DEDICATED_USERNAME"],
 		InstagramWebhookVerifyToken: values["INSTAGRAM_WEBHOOK_VERIFY_TOKEN"], InstagramAccessToken: values["INSTAGRAM_ACCESS_TOKEN"],
-		InstagramInboxOwnerEmail: values["INSTAGRAM_INBOX_OWNER_EMAIL"],
-		InstagramUser2AccountID:  values["INSTAGRAM_USER2_ACCOUNT_ID"],
-		AppID:                    values["APP_ID"], AppSecret: values["APP_SECRET"],
+		InstagramInboxOwnerEmail:   values["INSTAGRAM_INBOX_OWNER_EMAIL"],
+		InstagramUser2AccountID:    values["INSTAGRAM_USER2_ACCOUNT_ID"],
+		FacebookWebhookVerifyToken: values["FACEBOOK_WEBHOOK_VERIFY_TOKEN"],
+		AppID:                      values["APP_ID"], AppSecret: values["APP_SECRET"],
 	}, nil
 }

@@ -46,6 +46,7 @@ func main() {
 			SecureCookies: cfg.SessionCookieSecure, InstagramAccountID: cfg.InstagramDedicatedAccountID, InstagramUsername: cfg.InstagramDedicatedUsername, InstagramAccessToken: cfg.InstagramAccessToken,
 			InstagramUser2AccountID:     cfg.InstagramUser2AccountID,
 			InstagramWebhookVerifyToken: cfg.InstagramWebhookVerifyToken, InstagramAppSecret: cfg.InstagramAppSecret,
+			FacebookWebhookVerifyToken: cfg.FacebookWebhookVerifyToken,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 	}

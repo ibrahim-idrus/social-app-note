@@ -13,6 +13,7 @@ type Options struct {
 	SecureCookies                                               bool
 	InstagramAccountID, InstagramUsername, InstagramAccessToken string
 	InstagramWebhookVerifyToken, InstagramAppSecret             string
+	FacebookWebhookVerifyToken                                  string
 	InstagramGraphVersion, ProductName                          string
 	// Optional trace aid: expected sender ID, logged by webhook, never used for lookup.
 	InstagramUser2AccountID string
@@ -34,7 +35,7 @@ func Handler(db *sql.DB, options ...Options) http.Handler {
 	if option.ProductName == "" {
 		option.ProductName = "NoteDesk"
 	}
-	api := &API{db: db, secureCookies: option.SecureCookies, limiter: newLoginLimiter(), instagramAccountID: option.InstagramAccountID, instagramAccessToken: option.InstagramAccessToken, instagramGraphVersion: option.InstagramGraphVersion, productName: option.ProductName, httpClient: client, instagramWebhookVerifyToken: option.InstagramWebhookVerifyToken, instagramAppSecret: option.InstagramAppSecret, instagramUser2AccountID: option.InstagramUser2AccountID}
+	api := &API{db: db, secureCookies: option.SecureCookies, limiter: newLoginLimiter(), instagramAccountID: option.InstagramAccountID, instagramAccessToken: option.InstagramAccessToken, instagramGraphVersion: option.InstagramGraphVersion, productName: option.ProductName, httpClient: client, instagramWebhookVerifyToken: option.InstagramWebhookVerifyToken, instagramAppSecret: option.InstagramAppSecret, instagramUser2AccountID: option.InstagramUser2AccountID, facebookWebhookVerifyToken: option.FacebookWebhookVerifyToken}
 	_ = store.ConfigureInstagramIntegration(context.Background(), db, option.InstagramAccountID, option.InstagramUsername, option.InstagramAccessToken)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
@@ -59,6 +60,7 @@ func Handler(db *sql.DB, options ...Options) http.Handler {
 	mux.HandleFunc("POST /api/integrations/instagram/simulated-dm", api.simulatedInstagramDM)
 	mux.HandleFunc("GET /api/integrations/instagram/webhook", api.instagramWebhookVerify)
 	mux.HandleFunc("POST /api/integrations/instagram/webhook", api.instagramWebhook)
+	mux.HandleFunc("GET /api/integrations/facebook/webhook", api.facebookWebhookVerify)
 
 	mux.HandleFunc("GET /api/notes", api.authenticated(api.listNotes, false))
 	mux.HandleFunc("POST /api/notes", api.authenticated(api.createNote, true))
