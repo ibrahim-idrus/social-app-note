@@ -30,14 +30,37 @@ type FacebookMessageOutcome struct {
 }
 
 func ConfigureFacebookIntegration(ctx context.Context, db *sql.DB, pageID string) error {
-	if pageID == "" {
-		_, err := db.ExecContext(ctx, `DELETE FROM facebook_integrations`)
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
 		return err
 	}
-	_, err := db.ExecContext(ctx, `
+	defer tx.Rollback()
+
+	var previousPageID string
+	err = tx.QueryRowContext(ctx, `SELECT page_id FROM facebook_integrations WHERE id='configured_page'`).Scan(&previousPageID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if pageID == "" {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM social_identities WHERE platform='facebook'`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM facebook_integrations`); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+	if previousPageID != "" && previousPageID != pageID {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM social_identities WHERE platform='facebook'`); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO facebook_integrations (id, page_id, status) VALUES ('configured_page', ?, 'active')
-		ON CONFLICT(id) DO UPDATE SET page_id=excluded.page_id, status='active', updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')`, pageID)
-	return err
+		ON CONFLICT(id) DO UPDATE SET page_id=excluded.page_id, status='active', updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')`, pageID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func GetFacebookIntegration(ctx context.Context, db *sql.DB) (FacebookIntegration, error) {

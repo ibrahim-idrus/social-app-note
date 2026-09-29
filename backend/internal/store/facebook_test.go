@@ -183,6 +183,35 @@ func TestProcessFacebookMessageRollsBackReceiptOnFailure(t *testing.T) {
 	}
 }
 
+func TestFacebookPageChangeInvalidatesPageScopedBindingsAndPreservesNotes(t *testing.T) {
+	db := newFacebookStoreTest(t)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	identityID := pendingFacebookIdentity(t, db, 1, "bind-code", now.Add(time.Minute))
+	if _, err := ProcessFacebookMessage(context.Background(), db, "page-1", "shared-psid", "bind", "bind-code", false, false, now.Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ProcessFacebookMessage(context.Background(), db, "page-1", "shared-psid", "note", "preserved", false, false, now.Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	if err := ConfigureFacebookIntegration(context.Background(), db, "page-2"); err != nil {
+		t.Fatal(err)
+	}
+	var identities, preserved int
+	if err := db.QueryRow(`SELECT count(*) FROM social_identities WHERE id=?`, identityID).Scan(&identities); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT count(*) FROM notes WHERE content_markdown='preserved' AND social_identity_id IS NULL`).Scan(&preserved); err != nil {
+		t.Fatal(err)
+	}
+	if identities != 0 || preserved != 1 {
+		t.Fatalf("page change left identities=%d preserved notes=%d", identities, preserved)
+	}
+	outcome, err := ProcessFacebookMessage(context.Background(), db, "page-2", "shared-psid", "after-change", "must not route", false, false, now.Format(time.RFC3339Nano))
+	if err != nil || outcome.Kind != FacebookMessageIgnored {
+		t.Fatalf("old page binding routed after change: %#v %v", outcome, err)
+	}
+}
+
 func TestFacebookPendingIdentityIsOnePerUserAndRegenerationIsPlatformSpecific(t *testing.T) {
 	db := newFacebookStoreTest(t)
 	now := time.Now().UTC()
