@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { api, type InstagramRegistration, type SocialIdentity, type SocialPlatform } from '$lib/api';
+	import { api, type SocialIdentity, type SocialPlatform, type SocialRegistration } from '$lib/api';
 	import { appState } from '$lib/app-state.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -12,7 +12,7 @@
 	let username = $state('');
 	let error = $state('');
 	let loading = $state(true);
-	let registration = $state<InstagramRegistration | null>(null);
+	let registration = $state<SocialRegistration | null>(null);
 
 	let waitingFor = $state<Set<number>>(new Set());
 	let pollTimer: ReturnType<typeof setInterval> | undefined;
@@ -29,11 +29,11 @@
 		catch (cause) { error = cause instanceof Error ? cause.message : 'Settings could not load.'; }
 		finally { loading = false; }
 	}
-	async function add() {
-		if (!selectedPlatform) return;
+	async function add(platform: SocialPlatform | null = selectedPlatform) {
+		if (!platform) return;
 		error = '';
 		try {
-			registration = await api.createSocialIdentity(selectedPlatform.id, username.trim());
+			registration = await api.createSocialIdentity(platform.id, platform.id === 'instagram' ? username.trim() : '');
 			identities = [...identities, registration];
 			username = '';
 			selectedPlatform = null;
@@ -111,24 +111,41 @@
 				{:else}
 					{#if error}<div class="notice error" role="alert">{error}</div>{/if}
 					{#if platforms.find((platform) => platform.id === 'instagram')?.inbox}<div class="notice"><strong>Dedicated Instagram inbox</strong><p>Send verification codes and notes to @{platforms.find((platform) => platform.id === 'instagram')?.inbox?.username}.</p></div>{/if}
+					{#if platforms.find((platform) => platform.id === 'facebook')?.inbox}<div class="notice"><strong>Facebook Messenger destination</strong><p>Send verification codes and notes to Page {platforms.find((platform) => platform.id === 'facebook')?.inbox?.page_id}.</p></div>{/if}
 					{#each identities as identity (identity.id)}
-						<div class="platform-title"><span class="platform-icon"><MessageCircle size={20} /></span><div><strong>{platforms.find((platform) => platform.id === identity.platform)?.name ?? identity.platform}</strong><p class="field-help">@{identity.username}</p></div></div>
+						<div class="platform-title"><span class="platform-icon"><MessageCircle size={20} /></span><div><strong>{platforms.find((platform) => platform.id === identity.platform)?.name ?? identity.platform}</strong><p class="field-help">{identity.platform === 'facebook' ? `Destination Page ${identity.facebook_page?.page_id}` : `@${identity.username}`}</p></div></div>
 						{#if identity.verification_state === 'active'}
-							<div class="notice"><strong>✓ Instagram connected</strong><p>Only messages from verified @{identity.username} become notes.</p></div>
+							{#if identity.platform === 'facebook'}
+								<div class="notice"><strong>✓ Facebook Messenger connected</strong><p>New text messages from the verified Messenger account become notes.</p></div>
+							{:else}
+								<div class="notice"><strong>✓ Instagram connected</strong><p>Only messages from verified @{identity.username} become notes.</p></div>
+							{/if}
 						{:else if identity.verification_state === 'expired'}
-							<div class="notice error" role="status"><strong>Your verification code has expired</strong><p>Regenerate it and send the new code to Instagram.</p></div>
+							<div class="notice error" role="status"><strong>Your verification code has expired</strong><p>Regenerate it and send the new code to {identity.platform === 'facebook' ? 'the Facebook Page' : 'Instagram'}.</p></div>
 							<Button variant="outline" onclick={() => regenerate(identity)}>Regenerate code</Button>
 						{:else if identity.verification_state === 'invalid_code'}
 							<div class="notice error" role="status"><strong>That verification code is no longer valid.</strong><p>Regenerate a code and try again.</p></div>
 							<Button variant="outline" onclick={() => regenerate(identity)}>Regenerate code</Button>
 						{:else if identity.verification_state === 'system_failure'}
-							<div class="notice error" role="status"><strong>Instagram verification needs another try.</strong><p>No automatic retry was sent. Remove and reconnect this account to try again.</p></div>
+							{#if identity.platform === 'facebook'}
+								<div class="notice error" role="status"><strong>Facebook Messenger verification needs another try.</strong><p>Remove and reconnect this account to try again.</p></div>
+							{:else}
+								<div class="notice error" role="status"><strong>Instagram verification needs another try.</strong><p>No automatic retry was sent. Remove and reconnect this account to try again.</p></div>
+							{/if}
 						{:else if waitingFor.has(identity.id)}
-							<div class="notice" role="status"><strong>Waiting for Instagram verification…</strong><p>Keep this page open while NoteDesk checks the connection.</p></div>
+							{#if identity.platform === 'facebook'}
+								<div class="notice" role="status"><strong>Waiting for Facebook Messenger verification…</strong><p>Keep this page open while NoteDesk checks the connection.</p></div>
+							{:else}
+								<div class="notice" role="status"><strong>Waiting for Instagram verification…</strong><p>Keep this page open while NoteDesk checks the connection.</p></div>
+							{/if}
 						{:else if identity.status === 'pending'}
 							<div class="notice verification-instructions">
 								<div>
-									<p><strong>From your own @{identity.username} account, DM this code to @{(registration?.id === identity.id ? registration.instagram_account : identity.instagram_account)?.username}</strong></p>
+									{#if identity.platform === 'facebook'}
+										<p><strong>In Facebook Messenger, send this exact code to Page {identity.facebook_page?.page_id}</strong></p>
+									{:else}
+										<p><strong>From your own @{identity.username} account, DM this code to @{(registration?.id === identity.id ? registration.instagram_account : identity.instagram_account)?.username}</strong></p>
+									{/if}
 									{#if registration?.id === identity.id}<code>{registration.verification_code}</code>{:else}<p>Your code is hidden after reload.</p>{/if}
 									<p role="timer">Codes last 10 minutes · {timeRemaining(identity.verification_expires_at)}. Send it before the countdown ends.</p>
 								</div>
@@ -148,7 +165,7 @@
 					{:else if availablePlatforms.length}
 						<div class="toolbar">
 							{#each availablePlatforms as platform (platform.id)}
-								<Button variant="outline" onclick={() => selectedPlatform = platform}><Plus />Add platform: {platform.name}</Button>
+								<Button variant="outline" onclick={() => platform.id === 'facebook' ? add(platform) : selectedPlatform = platform}><Plus />Add platform: {platform.name}</Button>
 							{/each}
 						</div>
 					{:else}

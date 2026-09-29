@@ -39,6 +39,9 @@ func main() {
 	if err := store.ConfigureInstagramIntegrationOwner(context.Background(), db, cfg.InstagramDedicatedAccountID, cfg.InstagramInboxOwnerEmail); err != nil {
 		log.Printf("instagram inbox owner unavailable: %v", err)
 	}
+	if err := store.ConfigureFacebookIntegration(context.Background(), db, cfg.FacebookPageID); err != nil {
+		log.Fatal(err)
+	}
 
 	server := &http.Server{
 		Addr: cfg.HTTPAddr,
@@ -47,6 +50,7 @@ func main() {
 			InstagramUser2AccountID:     cfg.InstagramUser2AccountID,
 			InstagramWebhookVerifyToken: cfg.InstagramWebhookVerifyToken, InstagramAppSecret: cfg.InstagramAppSecret,
 			FacebookWebhookVerifyToken: cfg.FacebookWebhookVerifyToken,
+			FacebookPageID:             cfg.FacebookPageID,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 	}

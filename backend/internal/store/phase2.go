@@ -52,6 +52,7 @@ type SocialIdentity struct {
 	VerificationCode      string                `json:"verification_code,omitempty"`
 	VerificationExpiry    *string               `json:"verification_expires_at,omitempty"`
 	InstagramAccount      *InstagramIntegration `json:"instagram_account,omitempty"`
+	FacebookPage          *FacebookIntegration  `json:"facebook_page,omitempty"`
 	CreatedAt             string                `json:"created_at"`
 	UpdatedAt             string                `json:"updated_at"`
 }
@@ -71,6 +72,7 @@ func ListSocialIdentities(ctx context.Context, db *sql.DB, userID int64) ([]Soci
 	if err != nil {
 		return nil, err
 	}
+	facebook, facebookErr := GetFacebookIntegration(ctx, db)
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, user_id, platform, platform_user_id, username, normalized_username,
 			display_name, avatar_url, status, verified_at, verification_expires_at,
@@ -88,7 +90,11 @@ func ListSocialIdentities(ctx context.Context, db *sql.DB, userID int64) ([]Soci
 			return nil, err
 		}
 		setVerificationState(&identity, time.Now().UTC())
-		identity.InstagramAccount = &integration
+		if identity.Platform == "instagram" {
+			identity.InstagramAccount = &integration
+		} else if identity.Platform == "facebook" && facebookErr == nil {
+			identity.FacebookPage = &facebook
+		}
 		identities = append(identities, identity)
 	}
 	return identities, rows.Err()
@@ -118,7 +124,8 @@ func CreatePendingSocialIdentity(ctx context.Context, db *sql.DB, userID int64, 
 		if strings.Contains(message, "social_identities.user_id, social_identities.platform") {
 			return SocialIdentity{}, ErrPlatformIdentityAlreadyRegistered
 		}
-		if strings.Contains(message, "social_identities.platform, social_identities.normalized_username") ||
+		if strings.Contains(message, "social_identities.normalized_username") ||
+			strings.Contains(message, "social_identities.platform, social_identities.normalized_username") ||
 			strings.Contains(message, "social_identities.platform, social_identities.platform_user_id") {
 			return SocialIdentity{}, ErrIdentityUnavailable
 		}
@@ -175,11 +182,19 @@ func socialIdentityByID(ctx context.Context, db *sql.DB, userID, id int64) (Soci
 	err := scanSocialIdentity(row, &identity)
 	if err == nil {
 		setVerificationState(&identity, time.Now().UTC())
-		integration, integrationErr := instagramIntegration(ctx, db)
-		if integrationErr != nil {
-			return SocialIdentity{}, integrationErr
+		if identity.Platform == "instagram" {
+			integration, integrationErr := instagramIntegration(ctx, db)
+			if integrationErr != nil {
+				return SocialIdentity{}, integrationErr
+			}
+			identity.InstagramAccount = &integration
+		} else if identity.Platform == "facebook" {
+			integration, integrationErr := GetFacebookIntegration(ctx, db)
+			if integrationErr != nil {
+				return SocialIdentity{}, integrationErr
+			}
+			identity.FacebookPage = &integration
 		}
-		identity.InstagramAccount = &integration
 	}
 	return identity, err
 }

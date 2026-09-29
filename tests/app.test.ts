@@ -148,3 +148,28 @@ test('frontend contains no seeded, local-only, or simulated product state', asyn
 	const source = sources.join('\n');
 	assert.doesNotMatch(source, /localStorage|seedNotes|pravatar|Maya Chen|maya@example\.com|demo details|prototype stays|Simulate first DM|Demonstration state|setTimeout/);
 });
+
+test('Facebook Messenger settings use the configured Page and platform-specific verification states', async () => {
+	const source = await (await import('node:fs/promises')).readFile('src/routes/settings/+page.svelte', 'utf8');
+	assert.match(source, /Facebook Messenger/);
+	assert.match(source, /facebook_page/);
+	assert.match(source, /page_id/);
+	assert.match(source, /10 minutes/i);
+	assert.match(source, /Waiting for Facebook Messenger verification/);
+	assert.match(source, /Facebook Messenger connected/);
+	assert.match(source, /Regenerate code/);
+	assert.match(source, /Remove account/);
+	assert.doesNotMatch(source, /Threads/i);
+});
+
+test('Facebook is a note source with a badge and filter while Threads is absent', async () => {
+	const { readFile } = await import('node:fs/promises');
+	const apiSource = await readFile('src/lib/api.ts', 'utf8');
+	const listSource = await readFile('src/routes/notes/+page.svelte', 'utf8');
+	const detailSource = await readFile('src/routes/notes/[id]/+page.svelte', 'utf8');
+	assert.match(apiSource, /'manual' \| 'instagram' \| 'facebook'/);
+	assert.match(listSource, /<option value="facebook">Facebook Messenger<\/option>/);
+	assert.match(listSource, /note\.source==='facebook'/);
+	assert.match(detailSource, /Facebook Messenger note/);
+	assert.doesNotMatch([apiSource, listSource, detailSource].join('\n'), /threads/i);
+});

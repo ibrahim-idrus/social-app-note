@@ -19,6 +19,8 @@ type Config struct {
 	InstagramDedicatedAccountID, InstagramDedicatedUsername string
 	InstagramWebhookVerifyToken, InstagramAccessToken       string
 	FacebookWebhookVerifyToken                              string
+	FacebookMessengerEnabled                                bool
+	FacebookPageID                                          string
 	// Optional trace aid only: expected DM sender (test account). Never used
 	// for inbox lookup; sender identity resolves via platform_user_id.
 	InstagramUser2AccountID string
@@ -141,6 +143,7 @@ func Load(path string) (Config, error) {
 			}
 		}
 	}
+	facebookConfigured := values["MESSENGER_PAGE_ID"] != ""
 
 	return Config{
 		HTTPAddr:            values["HTTP_ADDR"],
@@ -153,6 +156,8 @@ func Load(path string) (Config, error) {
 		InstagramInboxOwnerEmail:   values["INSTAGRAM_INBOX_OWNER_EMAIL"],
 		InstagramUser2AccountID:    values["INSTAGRAM_USER2_ACCOUNT_ID"],
 		FacebookWebhookVerifyToken: values["FACEBOOK_WEBHOOK_VERIFY_TOKEN"],
+		FacebookMessengerEnabled:   facebookConfigured,
+		FacebookPageID:             values["MESSENGER_PAGE_ID"],
 		AppID:                      values["APP_ID"], AppSecret: values["APP_SECRET"],
 	}, nil
 }

@@ -16,7 +16,7 @@ func TestOpenAppliesFoundationMigrationOnce(t *testing.T) {
 	}
 	defer db.Close()
 
-	for _, table := range []string{"users", "social_identities", "notes", "sessions", "instagram_integrations"} {
+	for _, table := range []string{"users", "social_identities", "notes", "sessions", "instagram_integrations", "facebook_integrations", "facebook_message_receipts"} {
 		var count int
 		if err := db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&count); err != nil {
 			t.Fatal(err)
@@ -33,8 +33,8 @@ func TestOpenAppliesFoundationMigrationOnce(t *testing.T) {
 	if err := db.QueryRow(`SELECT count(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if count != 5 {
-		t.Fatalf("migration count = %d, want 5", count)
+	if count != 7 {
+		t.Fatalf("migration count = %d, want 7", count)
 	}
 }
 

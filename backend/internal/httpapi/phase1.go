@@ -42,6 +42,8 @@ type API struct {
 	httpClient                                      *http.Client
 	instagramWebhookVerifyToken, instagramAppSecret string
 	facebookWebhookVerifyToken                      string
+	facebookPageID                                  string
+	facebookMessengerEnabled                        bool
 }
 
 type authentication struct {
@@ -270,7 +272,7 @@ func (api *API) listNotes(w http.ResponseWriter, r *http.Request, auth authentic
 	pageSize, sizeOK := positiveInt(values.Get("page_size"), 20, 100)
 	validSort := sortField == "title" || sortField == "created_at" || sortField == "updated_at" || (sortField == "relevance" && query != "")
 	validOrder := order == "asc" || order == "desc"
-	validSource := source == "" || source == "manual" || source == "instagram"
+	validSource := source == "" || source == "manual" || source == "instagram" || source == "facebook"
 	validSearch := searchIn == "all" || searchIn == "title" || searchIn == "content"
 	if len([]rune(query)) > 200 || !validSearch || (rawQuery != "" && query == "" && values.Has("search_in")) || !validSource || !validSort || !validOrder || !pageOK || !sizeOK {
 		writeError(w, http.StatusBadRequest, "invalid_query")
