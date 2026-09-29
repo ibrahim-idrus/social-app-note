@@ -45,7 +45,7 @@ func searchSections(markdown, query string) []NoteSearchSection {
 }
 
 func splitSections(markdown string) []markdownSection {
-	sections := []markdownSection{{heading: "Introduction"}}
+	sections := []markdownSection{{heading: "Introduction", path: []string{}}}
 	stack := []string{}
 	fence := ""
 	for _, line := range strings.Split(markdown, "\n") {

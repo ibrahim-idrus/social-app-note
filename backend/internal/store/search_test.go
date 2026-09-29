@@ -6,6 +6,13 @@ import (
 	"testing"
 )
 
+func TestSearchSectionsIntroductionHasEmptyHeadingPath(t *testing.T) {
+	sections := searchSections("matching content", "matching")
+	if len(sections) != 1 || sections[0].HeadingPath == nil {
+		t.Fatalf("sections = %#v, want non-nil empty heading path", sections)
+	}
+}
+
 func TestSearchSections(t *testing.T) {
 	markdown := "intro needle\n\n# Launch\nparent needle\n\n## Requirements\nfirst needle and needle\n\n```\n# fake needle\n```\n\n# Next\nlast needle"
 	got := searchSections(markdown, "needle")
