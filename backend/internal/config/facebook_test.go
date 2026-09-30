@@ -62,7 +62,7 @@ func TestLoadFacebookMessengerWebhookToken(t *testing.T) {
 	if got.FacebookWebhookVerifyToken != "messenger-secret" {
 		t.Fatalf("FacebookWebhookVerifyToken was not loaded from messenger alias")
 	}
-	if got.FacebookPageID != "page-123" || got.AppSecret != "app-secret" {
+	if !got.FacebookMessengerEnabled || got.FacebookPageID != "page-123" || got.AppSecret != "app-secret" {
 		t.Fatalf("Facebook POST config was not loaded")
 	}
 }

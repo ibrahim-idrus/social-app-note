@@ -36,9 +36,10 @@ func Handler(db *sql.DB, options ...Options) http.Handler {
 	if option.ProductName == "" {
 		option.ProductName = "NoteDesk"
 	}
-	api := &API{db: db, secureCookies: option.SecureCookies, limiter: newLoginLimiter(), instagramAccountID: option.InstagramAccountID, instagramAccessToken: option.InstagramAccessToken, instagramGraphVersion: option.InstagramGraphVersion, productName: option.ProductName, httpClient: client, instagramWebhookVerifyToken: option.InstagramWebhookVerifyToken, instagramAppSecret: option.InstagramAppSecret, instagramUser2AccountID: option.InstagramUser2AccountID, facebookWebhookVerifyToken: option.FacebookWebhookVerifyToken, facebookAppSecret: option.FacebookAppSecret, facebookPageID: option.FacebookPageID}
+	facebookEnabled := option.FacebookPageID != ""
+	api := &API{db: db, secureCookies: option.SecureCookies, limiter: newLoginLimiter(), instagramAccountID: option.InstagramAccountID, instagramAccessToken: option.InstagramAccessToken, instagramGraphVersion: option.InstagramGraphVersion, productName: option.ProductName, httpClient: client, instagramWebhookVerifyToken: option.InstagramWebhookVerifyToken, instagramAppSecret: option.InstagramAppSecret, instagramUser2AccountID: option.InstagramUser2AccountID, facebookWebhookVerifyToken: option.FacebookWebhookVerifyToken, facebookAppSecret: option.FacebookAppSecret, facebookPageID: option.FacebookPageID, facebookMessengerEnabled: facebookEnabled}
 	_ = store.ConfigureInstagramIntegration(context.Background(), db, option.InstagramAccountID, option.InstagramUsername, option.InstagramAccessToken)
-	if option.FacebookPageID != "" {
+	if facebookEnabled {
 		_ = store.ConfigureFacebookIntegration(context.Background(), db, option.FacebookPageID)
 	}
 	mux := http.NewServeMux()

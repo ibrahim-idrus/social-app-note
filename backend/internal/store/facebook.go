@@ -9,6 +9,10 @@ import (
 	"strings"
 )
 
+type FacebookIntegration struct {
+	PageID string `json:"page_id"`
+}
+
 type FacebookMessageOutcomeKind string
 
 const (
@@ -57,6 +61,35 @@ func ConfigureFacebookIntegration(ctx context.Context, db *sql.DB, pageID string
 		return err
 	}
 	return tx.Commit()
+}
+
+func GetFacebookIntegration(ctx context.Context, db *sql.DB) (FacebookIntegration, error) {
+	var integration FacebookIntegration
+	err := db.QueryRowContext(ctx, `SELECT page_id FROM facebook_integrations WHERE id='configured_page' AND status='active'`).Scan(&integration.PageID)
+	return integration, err
+}
+
+func CreatePendingFacebookIdentity(ctx context.Context, db *sql.DB, userID int64, codeHash []byte, expiresAt string) (SocialIdentity, error) {
+	return CreatePendingSocialIdentity(ctx, db, userID, "facebook", "", "", "", "", codeHash, expiresAt)
+}
+
+func ReplaceFacebookIdentityVerification(ctx context.Context, db *sql.DB, userID, id int64, codeHash []byte, expiresAt string) (SocialIdentity, error) {
+	result, err := db.ExecContext(ctx, `
+		UPDATE social_identities
+		SET verification_code_hash=?, verification_expires_at=?, verification_consumed_at=NULL,
+			verification_result='waiting', verification_result_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
+			updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
+		WHERE id=? AND user_id=? AND platform='facebook' AND status='pending'`, codeHash, expiresAt, id, userID)
+	if err != nil {
+		return SocialIdentity{}, err
+	}
+	if count, err := result.RowsAffected(); err != nil || count == 0 {
+		if err != nil {
+			return SocialIdentity{}, err
+		}
+		return SocialIdentity{}, sql.ErrNoRows
+	}
+	return socialIdentityByID(ctx, db, userID, id)
 }
 
 func ProcessFacebookMessage(ctx context.Context, db *sql.DB, pageID, psid, externalMessageID, text string, echo, hasAttachments bool, now string) (FacebookMessageOutcome, error) {

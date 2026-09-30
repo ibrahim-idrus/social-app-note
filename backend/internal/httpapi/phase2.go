@@ -22,9 +22,16 @@ import (
 
 func (api *API) socialPlatforms(w http.ResponseWriter, _ *http.Request, _ authentication) {
 	inbox, _ := store.GetInstagramIntegration(context.Background(), api.db)
-	writeJSON(w, http.StatusOK, map[string]any{"platforms": []map[string]any{{
+	platforms := []map[string]any{{
 		"id": "instagram", "name": "Instagram", "available": true, "search_enabled": false, "inbox": inbox,
-	}}})
+	}}
+	if api.facebookMessengerEnabled {
+		platforms = append(platforms, map[string]any{
+			"id": "facebook", "name": "Facebook Messenger", "available": true, "search_enabled": false,
+			"inbox": store.FacebookIntegration{PageID: api.facebookPageID},
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"platforms": platforms})
 }
 
 type instagramAccountMatch struct {
@@ -109,6 +116,15 @@ func (api *API) listSocialIdentities(w http.ResponseWriter, r *http.Request, aut
 		writeError(w, http.StatusInternalServerError, "internal_error")
 		return
 	}
+	if !api.facebookMessengerEnabled {
+		visible := identities[:0]
+		for _, identity := range identities {
+			if identity.Platform != "facebook" {
+				visible = append(visible, identity)
+			}
+		}
+		identities = visible
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"identities": identities})
 }
 
@@ -119,6 +135,29 @@ func (api *API) createSocialIdentity(w http.ResponseWriter, r *http.Request, aut
 		Username       string `json:"username"`
 	}
 	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if input.Platform == "facebook" {
+		if !api.facebookMessengerEnabled || input.PlatformUserID != "" || input.Username != "" {
+			writeError(w, http.StatusBadRequest, "invalid_input")
+			return
+		}
+		code, codeHash, expiresAt, err := newInstagramVerification()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error")
+			return
+		}
+		identity, err := store.CreatePendingFacebookIdentity(r.Context(), api.db, auth.ID, codeHash, expiresAt)
+		if errors.Is(err, store.ErrPlatformIdentityAlreadyRegistered) {
+			writeError(w, http.StatusConflict, "facebook_identity_already_registered")
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error")
+			return
+		}
+		identity.VerificationCode = code
+		writeJSON(w, http.StatusCreated, identity)
 		return
 	}
 	username, ok := normalizeInstagramUsername(input.Username)
@@ -164,7 +203,13 @@ func (api *API) regenerateSocialIdentityCode(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusInternalServerError, "internal_error")
 		return
 	}
-	identity, err := store.ReplaceSocialIdentityVerification(r.Context(), api.db, auth.ID, id, codeHash, expiresAt)
+	var identity store.SocialIdentity
+	if api.facebookMessengerEnabled {
+		identity, err = store.ReplaceFacebookIdentityVerification(r.Context(), api.db, auth.ID, id, codeHash, expiresAt)
+	}
+	if !api.facebookMessengerEnabled || errors.Is(err, sql.ErrNoRows) {
+		identity, err = store.ReplaceSocialIdentityVerification(r.Context(), api.db, auth.ID, id, codeHash, expiresAt)
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "identity_not_found")
 		return

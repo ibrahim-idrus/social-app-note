@@ -20,6 +20,11 @@ func TestServerUsesWebhookOnlyForInstagramInbound(t *testing.T) {
 			t.Fatalf("server startup must configure Instagram and degrade safely when its owner is unavailable: missing %s", required)
 		}
 	}
+	for _, required := range []string{"ConfigureFacebookIntegration", "FacebookPageID"} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("server startup must wire fully configured Facebook Messenger support: missing %s", required)
+		}
+	}
 	if strings.Contains(text, "ConfigureInstagramIntegrationOwner(context.Background(), db, cfg.InstagramDedicatedAccountID, cfg.InstagramInboxOwnerEmail); err != nil {\n		log.Fatal(err)") {
 		t.Fatal("a missing Instagram inbox owner must not stop the unrelated API")
 	}

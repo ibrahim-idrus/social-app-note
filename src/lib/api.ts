@@ -6,7 +6,7 @@ export type Note = {
 	social_identity_id: number | null;
 	title: string;
 	content_markdown: string;
-	source: 'manual' | 'instagram';
+	source: 'manual' | 'instagram' | 'facebook';
 	external_message_id: string | null;
 	created_at: string;
 	updated_at: string;
@@ -14,7 +14,7 @@ export type Note = {
 	sections?: NoteSearchSection[];
 };
 export type NotesPage = { notes: Note[]; total: number; page: number; page_size: number };
-export type SocialPlatform = { id: string; name: string; available: boolean; search_enabled: boolean; inbox?: { instagram_user_id: string; username: string } };
+export type SocialPlatform = { id: string; name: string; available: boolean; search_enabled: boolean; inbox?: { instagram_user_id?: string; username?: string; page_id?: string } };
 export type SocialAccountMatch = { id: string; username: string; name: string; profile_picture_url: string };
 export type SocialIdentity = {
 	id: number;
@@ -30,6 +30,7 @@ export type SocialIdentity = {
 	verification_updated_at: string | null;
 	verification_expires_at?: string;
 	instagram_account?: { instagram_user_id: string; username: string };
+	facebook_page?: { page_id: string };
 	created_at: string;
 	updated_at: string;
 };
@@ -38,6 +39,12 @@ export type InstagramRegistration = SocialIdentity & {
 	verification_expires_at: string;
 	instagram_account: { instagram_user_id: string; username: string };
 };
+export type FacebookRegistration = SocialIdentity & {
+	verification_code: string;
+	verification_expires_at: string;
+	facebook_page: { page_id: string };
+};
+export type SocialRegistration = InstagramRegistration | FacebookRegistration;
 
 const messages: Record<string, string> = {
 	authentication_required: 'Please sign in to continue.',
@@ -46,6 +53,7 @@ const messages: Record<string, string> = {
 	identity_unavailable: 'This Instagram identity is unavailable.',
 	dedicated_instagram_account: 'That account is the dedicated receiving inbox. Add the Instagram account that will send notes instead.',
 	platform_identity_already_registered: 'An Instagram identity is already registered.',
+	facebook_identity_already_registered: 'Facebook Messenger is already connected.',
 	invalid_credentials: 'Email or password is incorrect.',
 	invalid_input: 'Check the information and try again.',
 	invalid_query: 'The requested filters are invalid.',
@@ -106,8 +114,8 @@ export function createApiClient(fetcher: Fetch = fetch, cookies = () => typeof d
 		deleteNote: (id: number) => request<void>(`/api/notes/${id}`, { method: 'DELETE' }),
 		platforms: async () => (await request<{ platforms: SocialPlatform[] }>('/api/social-platforms')).platforms,
 		identities: async () => (await request<{ identities: SocialIdentity[] }>('/api/social-identities')).identities,
-		createSocialIdentity: (platform: string, username: string) => request<InstagramRegistration>('/api/social-identities', { method: 'POST', body: JSON.stringify({ platform, username }) }),
-		regenerateSocialIdentityCode: (id: number) => request<InstagramRegistration>(`/api/social-identities/${id}/verification-code`, { method: 'POST' }),
+		createSocialIdentity: (platform: string, username = '') => request<SocialRegistration>('/api/social-identities', { method: 'POST', body: JSON.stringify({ platform, username }) }),
+		regenerateSocialIdentityCode: (id: number) => request<SocialRegistration>(`/api/social-identities/${id}/verification-code`, { method: 'POST' }),
 		deleteSocialIdentity: (id: number) => request<void>(`/api/social-identities/${id}`, { method: 'DELETE' })
 	};
 }

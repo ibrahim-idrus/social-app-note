@@ -7,8 +7,8 @@
 	import { ArrowRight, MessageCircle, NotebookPen, Plus } from '@lucide/svelte';
 	import { onMount } from 'svelte';
 	let notes = $state<Note[]>([]); let identity = $state<SocialIdentity | null>(null); let error = $state('');
-	let manual = $derived(notes.filter((note) => note.source === 'manual').length); let instagram = $derived(notes.length - manual);
-	onMount(async () => { try { const [result, identities] = await Promise.all([api.listNotes({ pageSize: 100 }), api.identities()]); notes = result.notes; identity = identities[0] ?? null; } catch (cause) { error = cause instanceof Error ? cause.message : 'Dashboard could not load.'; } });
+	let manual = $derived(notes.filter((note) => note.source === 'manual').length); let instagram = $derived(notes.filter((note) => note.source === 'instagram').length);
+	onMount(async () => { try { const [result, identities] = await Promise.all([api.listNotes({ pageSize: 100 }), api.identities()]); notes = result.notes; identity = identities.find((item) => item.platform === 'instagram') ?? null; } catch (cause) { error = cause instanceof Error ? cause.message : 'Dashboard could not load.'; } });
 </script>
 <svelte:head><title>Dashboard · NoteDesk</title></svelte:head>
 <div class="page">
