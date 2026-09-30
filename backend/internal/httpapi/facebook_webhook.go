@@ -85,6 +85,11 @@ func (api *API) facebookWebhook(w http.ResponseWriter, r *http.Request) {
 			log.Printf("facebook webhook event receipt sender=%s recipient=%s page=%s message=%s", sender, recipient, page, messageID)
 			reason := api.facebookWebhookIgnoreReason(entry.ID, event)
 			if reason != "" {
+				if err := store.RecordFacebookMessage(r.Context(), api.db, entry.ID, event.Sender.ID, event.Message.MID, event.Message.Text, "ignored", time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+					requestResult = "processing_failed"
+					writeError(w, http.StatusInternalServerError, "internal_error")
+					return
+				}
 				log.Printf("facebook webhook event result sender=%s recipient=%s page=%s message=%s processing_ran=false processing_result=%s", sender, recipient, page, messageID, reason)
 				continue
 			}

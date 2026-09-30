@@ -173,3 +173,21 @@ test('Facebook is a note source with a badge and filter while Threads is absent'
 	assert.match(detailSource, /Facebook Messenger note/);
 	assert.doesNotMatch([apiSource, listSource, detailSource].join('\n'), /threads/i);
 });
+
+test('Facebook message history uses the authenticated API and notes-page table', async () => {
+	let request: Request | undefined;
+	const client = createApiClient(async (input, init) => { request = new Request(input, init); return Response.json({ messages: [] }); });
+	await client.facebookMessages();
+	assert.equal(request?.url, 'http://localhost/api/facebook-messages');
+	assert.equal(request?.credentials, 'same-origin');
+	const source = await (await import('node:fs/promises')).readFile('src/routes/notes/+page.svelte', 'utf8');
+	for (const label of ['Received', 'Message', 'Originating account', 'Destination Page', 'Status']) assert.match(source, new RegExp(label));
+});
+
+test('Instagram Reel notes use the official embed with a link fallback', async () => {
+	const { readFile } = await import('node:fs/promises');
+	const source = await readFile('src/lib/components/InstagramMedia.svelte', 'utf8');
+	assert.match(source, /attachment\.type === 'ig_reel'/);
+	assert.match(source, /\/embed\//);
+	assert.match(source, /Open on Instagram/);
+});

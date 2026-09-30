@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -22,17 +23,37 @@ type Session struct {
 }
 
 type Note struct {
-	ID                int64               `json:"id"`
-	UserID            int64               `json:"-"`
-	SocialIdentityID  *int64              `json:"social_identity_id"`
-	Title             string              `json:"title"`
-	ContentMarkdown   string              `json:"content_markdown"`
-	Source            string              `json:"source"`
-	ExternalMessageID *string             `json:"external_message_id"`
-	CreatedAt         string              `json:"created_at"`
-	UpdatedAt         string              `json:"updated_at"`
-	TitleMatches      []MatchRange        `json:"title_matches,omitempty"`
-	Sections          []NoteSearchSection `json:"sections,omitempty"`
+	ID                   int64                 `json:"id"`
+	UserID               int64                 `json:"-"`
+	SocialIdentityID     *int64                `json:"social_identity_id"`
+	Title                string                `json:"title"`
+	ContentMarkdown      string                `json:"content_markdown"`
+	Source               string                `json:"source"`
+	ExternalMessageID    *string               `json:"external_message_id"`
+	CreatedAt            string                `json:"created_at"`
+	UpdatedAt            string                `json:"updated_at"`
+	TitleMatches         []MatchRange          `json:"title_matches,omitempty"`
+	Sections             []NoteSearchSection   `json:"sections,omitempty"`
+	InstagramAttachments []InstagramAttachment `json:"instagram_attachments"`
+}
+
+type InstagramAttachment struct {
+	Type             string `json:"type"`
+	URL              string `json:"url"`
+	InstagramMediaID string `json:"media_id,omitempty"`
+	Alt              string `json:"alt"`
+}
+
+func scanNote(s interface{ Scan(...any) error }, n *Note) error {
+	var raw sql.NullString
+	if err := s.Scan(&n.ID, &n.UserID, &n.SocialIdentityID, &n.Title, &n.ContentMarkdown, &n.Source, &n.ExternalMessageID, &n.CreatedAt, &n.UpdatedAt, &raw); err != nil {
+		return err
+	}
+	n.InstagramAttachments = []InstagramAttachment{}
+	if raw.Valid {
+		return json.Unmarshal([]byte(raw.String), &n.InstagramAttachments)
+	}
+	return nil
 }
 
 type NoteList struct {
@@ -103,11 +124,10 @@ func CreateNote(ctx context.Context, db *sql.DB, userID int64, title, content st
 
 func NoteByID(ctx context.Context, db *sql.DB, userID, id int64) (Note, error) {
 	var note Note
-	err := db.QueryRowContext(ctx, `
-		SELECT id, user_id, social_identity_id, title, content_markdown, source, external_message_id, created_at, updated_at
-		FROM notes WHERE id = ? AND user_id = ?`, id, userID).Scan(
-		&note.ID, &note.UserID, &note.SocialIdentityID, &note.Title, &note.ContentMarkdown, &note.Source, &note.ExternalMessageID, &note.CreatedAt, &note.UpdatedAt,
-	)
+	row := db.QueryRowContext(ctx, `
+		SELECT id, user_id, social_identity_id, title, content_markdown, source, external_message_id, created_at, updated_at, instagram_attachments_json
+		FROM notes WHERE id = ? AND user_id = ?`, id, userID)
+	err := scanNote(row, &note)
 	return note, err
 }
 
@@ -171,7 +191,7 @@ func ListNotes(ctx context.Context, db *sql.DB, userID int64, query, searchIn, s
 	}
 	args = append(args, pageSize, (page-1)*pageSize)
 	rows, err := db.QueryContext(ctx, fmt.Sprintf(`
-		SELECT id, user_id, social_identity_id, title, content_markdown, source, external_message_id, created_at, updated_at
+		SELECT id, user_id, social_identity_id, title, content_markdown, source, external_message_id, created_at, updated_at, instagram_attachments_json
 		FROM notes WHERE %s ORDER BY %s LIMIT ? OFFSET ?`, where, orderBy), args...)
 	if err != nil {
 		return NoteList{}, err
@@ -180,7 +200,7 @@ func ListNotes(ctx context.Context, db *sql.DB, userID int64, query, searchIn, s
 	result := NoteList{Notes: []Note{}, Total: total}
 	for rows.Next() {
 		var note Note
-		if err := rows.Scan(&note.ID, &note.UserID, &note.SocialIdentityID, &note.Title, &note.ContentMarkdown, &note.Source, &note.ExternalMessageID, &note.CreatedAt, &note.UpdatedAt); err != nil {
+		if err := scanNote(rows, &note); err != nil {
 			return NoteList{}, err
 		}
 		if query != "" {

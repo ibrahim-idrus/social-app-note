@@ -5,9 +5,11 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -264,5 +266,35 @@ func TestInstagramWebhookProcessesSignedTextAndIgnoresEcho(t *testing.T) {
 	_ = c.db.QueryRow(`SELECT count(*) FROM notes`).Scan(&notes)
 	if notes != 0 {
 		t.Fatalf("echo created note: %d", notes)
+	}
+}
+
+func TestObservedInstagramPostFixtureContract(t *testing.T) {
+	body, err := os.ReadFile("testdata/instagram-post.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload instagramWebhookPayload
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatal(err)
+	}
+	attachments := supportedInstagramAttachments(payload.Entry[0].Messaging[0].Message.Attachments)
+	if len(attachments) != 1 || attachments[0].Type != "ig_post" || attachments[0].URL == "" || attachments[0].InstagramMediaID != "MEDIA_ID" {
+		t.Fatalf("attachments=%#v", attachments)
+	}
+}
+
+func TestObservedInstagramReelFixtureContract(t *testing.T) {
+	body, err := os.ReadFile("testdata/instagram-reel.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload instagramWebhookPayload
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatal(err)
+	}
+	attachments := supportedInstagramAttachments(payload.Entry[0].Messaging[0].Message.Attachments)
+	if len(attachments) != 1 || attachments[0].Type != "ig_reel" || attachments[0].URL != "https://www.instagram.com/reel/REDACTED/" || attachments[0].InstagramMediaID != "REEL_MEDIA_ID" {
+		t.Fatalf("attachments=%#v", attachments)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -248,6 +249,10 @@ func ConfigureInstagramIntegrationOwner(ctx context.Context, db *sql.DB, account
 }
 
 func ProcessInstagramDM(ctx context.Context, db *sql.DB, recipientID, senderID, externalMessageID, text, now string) (InstagramDMOutcome, error) {
+	return ProcessInstagramMessage(ctx, db, recipientID, senderID, externalMessageID, text, nil, now)
+}
+
+func ProcessInstagramMessage(ctx context.Context, db *sql.DB, recipientID, senderID, externalMessageID, text string, attachments []InstagramAttachment, now string) (InstagramDMOutcome, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return InstagramDMOutcome{}, err
@@ -280,15 +285,83 @@ func ProcessInstagramDM(ctx context.Context, db *sql.DB, recipientID, senderID, 
 		if len(consumedHash) == sha256.Size && subtle.ConstantTimeCompare(consumedHash, codeHash[:]) == 1 {
 			return commitInstagramDMOutcome(tx, InstagramDMOutcome{Kind: InstagramDMDuplicate, IdentityID: identityID})
 		}
-		result, err := tx.ExecContext(ctx, `
-			INSERT OR IGNORE INTO notes (
-				user_id, social_identity_id, title, content_markdown, source, external_message_id
-			) VALUES (?, ?, 'Instagram DM', ?, 'instagram', ?)`, userID, identityID, text, externalMessageID)
+		var replay bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM instagram_note_events WHERE external_message_id=?)`, externalMessageID).Scan(&replay); err != nil {
+			return InstagramDMOutcome{}, err
+		}
+		if replay {
+			return commitInstagramDMOutcome(tx, InstagramDMOutcome{Kind: InstagramDMDuplicate, IdentityID: identityID})
+		}
+		instant, err := time.Parse(time.RFC3339Nano, now)
 		if err != nil {
 			return InstagramDMOutcome{}, err
 		}
-		count, err := result.RowsAffected()
-		if err != nil {
+		var noteID int64
+		// Meta delivered the observed share as attachment first, then text with a
+		// different mid. Only complete that still-empty attachment note; never
+		// append media or text to an already finalized or edited note.
+		if text != "" && len(attachments) == 0 {
+			err = tx.QueryRowContext(ctx, `
+				SELECT n.id FROM notes n
+				WHERE n.social_identity_id = ?
+				  AND n.content_markdown = ''
+				  AND n.instagram_attachments_json IS NOT NULL
+				  AND n.created_at >= ?
+				  AND n.updated_at = n.created_at
+				ORDER BY n.created_at DESC LIMIT 1`, identityID, instant.Add(-10*time.Second).Format(time.RFC3339Nano)).Scan(&noteID)
+		} else {
+			err = sql.ErrNoRows
+		}
+		encoded, marshalErr := json.Marshal(attachments)
+		if marshalErr != nil {
+			return InstagramDMOutcome{}, marshalErr
+		}
+		var count int64 = 1
+		if errors.Is(err, sql.ErrNoRows) {
+			jakarta, loadErr := time.LoadLocation("Asia/Jakarta")
+			if loadErr != nil {
+				return InstagramDMOutcome{}, loadErr
+			}
+			title := "Instagram DM " + instant.In(jakarta).Format("01/02/2006 15:04")
+			var raw any
+			if len(attachments) > 0 {
+				raw = string(encoded)
+			}
+			result, insertErr := tx.ExecContext(ctx, `INSERT INTO notes(user_id,social_identity_id,title,content_markdown,source,external_message_id,instagram_attachments_json,created_at,updated_at) VALUES(?,?,?,?, 'instagram',?,?,?,?)`, userID, identityID, title, text, externalMessageID, raw, now, now)
+			if insertErr != nil {
+				return InstagramDMOutcome{}, insertErr
+			}
+			noteID, _ = result.LastInsertId()
+		} else if err != nil {
+			return InstagramDMOutcome{}, err
+		} else {
+			var existing sql.NullString
+			var content string
+			if err := tx.QueryRowContext(ctx, `SELECT content_markdown,instagram_attachments_json FROM notes WHERE id=?`, noteID).Scan(&content, &existing); err != nil {
+				return InstagramDMOutcome{}, err
+			}
+			if text != "" {
+				content = text
+			}
+			if existing.Valid && len(attachments) > 0 {
+				var old []InstagramAttachment
+				if json.Unmarshal([]byte(existing.String), &old) == nil {
+					attachments = append(old, attachments...)
+					encoded, _ = json.Marshal(attachments)
+				}
+			}
+			var raw any
+			if existing.Valid {
+				raw = existing.String
+			}
+			if len(attachments) > 0 {
+				raw = string(encoded)
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE notes SET content_markdown=?,instagram_attachments_json=?,updated_at=? WHERE id=?`, content, raw, now, noteID); err != nil {
+				return InstagramDMOutcome{}, err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO instagram_note_events(external_message_id,note_id) VALUES(?,?)`, externalMessageID, noteID); err != nil {
 			return InstagramDMOutcome{}, err
 		}
 		kind := InstagramDMNoteCreated

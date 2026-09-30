@@ -1,0 +1,33 @@
+{
+  "object": "instagram",
+  "entry": [
+    {
+      "time": 1790691356000,
+      "id": "INBOX_ID",
+      "messaging": [
+        {
+          "sender": {
+            "id": "VERIFIED_SENDER_ID"
+          },
+          "recipient": {
+            "id": "INBOX_ID"
+          },
+          "timestamp": 1790691356000,
+          "message": {
+            "mid": "REEL_MID",
+            "attachments": [
+              {
+                "type": "ig_reel",
+                "payload": {
+                  "reel_video_id": "REEL_MEDIA_ID",
+                  "title": "Redacted Reel caption",
+                  "url": "https://www.instagram.com/reel/REDACTED/"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

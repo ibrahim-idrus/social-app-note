@@ -1,0 +1,33 @@
+{
+  "object": "instagram",
+  "entry": [
+    {
+      "time": 1790687768000,
+      "id": "INBOX_ID",
+      "messaging": [
+        {
+          "sender": {
+            "id": "VERIFIED_SENDER_ID"
+          },
+          "recipient": {
+            "id": "INBOX_ID"
+          },
+          "timestamp": 1790687768000,
+          "message": {
+            "mid": "ATTACHMENT_MID",
+            "attachments": [
+              {
+                "type": "ig_post",
+                "payload": {
+                  "ig_post_media_id": "MEDIA_ID",
+                  "title": "Redacted Instagram post caption",
+                  "url": "https://lookaside.fbsbx.com/ig_messaging_cdn/redacted.webp?asset_id=REDACTED&signature=REDACTED"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

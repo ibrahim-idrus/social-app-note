@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -33,8 +34,8 @@ func TestOpenAppliesFoundationMigrationOnce(t *testing.T) {
 	if err := db.QueryRow(`SELECT count(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if count != 6 {
-		t.Fatalf("migration count = %d, want 6", count)
+	if count != 8 {
+		t.Fatalf("migration count = %d, want 8", count)
 	}
 }
 
@@ -256,5 +257,54 @@ func TestProcessInstagramDMReturnsVerificationOutcomesAndClaimsReplyAtomically(t
 				t.Fatalf("verification_result = %q, want %q", feedback, test.wantFeedback)
 			}
 		})
+	}
+}
+
+func TestInstagramAttachmentSplitCollectionAndReplay(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "sqlite.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO users(id,name,email,password_hash) VALUES(1,'A','a@b.c','x'); INSERT INTO instagram_integrations(instagram_user_id,username,access_token,owner_user_id,status) VALUES('inbox','inbox','x',1,'active'); INSERT INTO social_identities(id,user_id,platform,platform_user_id,username,normalized_username,status) VALUES(1,1,'instagram','sender','a','a','active')`); err != nil {
+		t.Fatal(err)
+	}
+	a := []InstagramAttachment{{Type: "ig_post", URL: "https://lookaside.fbsbx.com/media.webp", InstagramMediaID: "media-1", Alt: "Instagram post"}}
+	if _, err := ProcessInstagramMessage(context.Background(), db, "inbox", "sender", "attachment-mid", "", a, "2026-09-29T08:19:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ProcessInstagramMessage(context.Background(), db, "inbox", "sender", "text-mid", "follow-up", nil, "2026-09-29T08:19:01Z"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ProcessInstagramMessage(context.Background(), db, "inbox", "sender", "text-mid", "replay", nil, "2026-09-29T08:19:02Z"); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	var title, content string
+	var raw sql.NullString
+	if err := db.QueryRow(`SELECT count(*), title, content_markdown, instagram_attachments_json FROM notes`).Scan(&count, &title, &content, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 || title != "Instagram DM 09/29/2026 15:19" || content != "follow-up" || !raw.Valid || !strings.Contains(raw.String, `"type":"ig_post"`) || !strings.Contains(raw.String, `"url":"https://lookaside.fbsbx.com/media.webp"`) || !strings.Contains(raw.String, `"media_id":"media-1"`) {
+		t.Fatalf("note=%d %q %q %q", count, title, content, raw.String)
+	}
+}
+
+func TestInstagramAttachmentsRequireVerifiedSender(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "sqlite.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO users(id,name,email,password_hash) VALUES(1,'A','a@b.c','x'); INSERT INTO instagram_integrations(instagram_user_id,username,access_token,owner_user_id,status) VALUES('inbox','inbox','x',1,'active')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ProcessInstagramMessage(context.Background(), db, "inbox", "unknown", "mid", "", []InstagramAttachment{{Type: "ig_post", URL: "https://example.com/a.webp"}}, "2026-09-29T08:19:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	var notes int
+	_ = db.QueryRow(`SELECT count(*) FROM notes`).Scan(&notes)
+	if notes != 0 {
+		t.Fatalf("notes=%d", notes)
 	}
 }

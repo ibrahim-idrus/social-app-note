@@ -41,6 +41,28 @@ func pendingFacebookIdentity(t *testing.T, db *sql.DB, userID int64, code string
 	return identity.ID
 }
 
+func TestListFacebookMessagesIncludesIgnoredAndScopesByConnectedSender(t *testing.T) {
+	db := newFacebookStoreTest(t)
+	for _, statement := range []string{
+		`INSERT INTO social_identities (user_id, platform, platform_user_id, username, normalized_username, status) VALUES (1, 'facebook', 'sender-1', '', '', 'active')`,
+		`INSERT INTO users (id, name, email, password_hash) VALUES (3, 'Other', 'facebook-history-other@example.com', 'hash')`,
+		`INSERT INTO social_identities (user_id, platform, platform_user_id, username, normalized_username, status) VALUES (3, 'facebook', 'sender-2', '', '', 'active')`,
+		`INSERT INTO facebook_message_receipts (external_message_id, page_id, psid, received_at, message_text, status) VALUES ('ignored-1', 'page-1', 'sender-1', '2026-09-30T13:55:58Z', 'before verification', 'ignored')`,
+		`INSERT INTO facebook_message_receipts (external_message_id, page_id, psid, received_at, message_text, status) VALUES ('private-2', 'page-1', 'sender-2', '2026-09-30T13:56:58Z', 'must not leak', 'ignored')`,
+	} {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	messages, err := ListFacebookMessages(context.Background(), db, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 1 || messages[0].Text != "before verification" || messages[0].SenderID != "sender-1" || messages[0].Status != "ignored" {
+		t.Fatalf("messages = %#v", messages)
+	}
+}
+
 func TestFacebookSchemaAndConfiguredPage(t *testing.T) {
 	db := newFacebookStoreTest(t)
 	for _, table := range []string{"facebook_integrations", "facebook_message_receipts"} {

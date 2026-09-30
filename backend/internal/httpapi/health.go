@@ -69,6 +69,7 @@ func Handler(db *sql.DB, options ...Options) http.Handler {
 	mux.HandleFunc("POST /api/integrations/facebook/webhook", api.facebookWebhook)
 
 	mux.HandleFunc("GET /api/notes", api.authenticated(api.listNotes, false))
+	mux.HandleFunc("GET /api/facebook-messages", api.authenticated(api.listFacebookMessages, false))
 	mux.HandleFunc("POST /api/notes", api.authenticated(api.createNote, true))
 	mux.HandleFunc("GET /api/notes/{id}", api.authenticated(api.getNote, false))
 	mux.HandleFunc("PUT /api/notes/{id}", api.authenticated(api.updateNote, true))

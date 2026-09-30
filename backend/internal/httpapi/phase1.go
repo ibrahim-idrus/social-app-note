@@ -179,6 +179,15 @@ func (api *API) profile(w http.ResponseWriter, _ *http.Request, auth authenticat
 	writeJSON(w, http.StatusOK, map[string]any{"user": auth.User})
 }
 
+func (api *API) listFacebookMessages(w http.ResponseWriter, r *http.Request, auth authentication) {
+	messages, err := store.ListFacebookMessages(r.Context(), api.db, auth.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"messages": messages})
+}
+
 func (api *API) createNote(w http.ResponseWriter, r *http.Request, auth authentication) {
 	title, content, ok := noteInput(w, r)
 	if !ok {

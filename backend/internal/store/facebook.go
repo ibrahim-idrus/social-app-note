@@ -92,6 +92,41 @@ func ReplaceFacebookIdentityVerification(ctx context.Context, db *sql.DB, userID
 	return socialIdentityByID(ctx, db, userID, id)
 }
 
+type FacebookMessage struct {
+	ExternalMessageID string `json:"external_message_id"`
+	SenderID          string `json:"sender_id"`
+	PageID            string `json:"page_id"`
+	Text              string `json:"text"`
+	Status            string `json:"status"`
+	NoteID            *int64 `json:"note_id"`
+	ReceivedAt        string `json:"received_at"`
+}
+
+func ListFacebookMessages(ctx context.Context, db *sql.DB, userID int64) ([]FacebookMessage, error) {
+	rows, err := db.QueryContext(ctx, `SELECT r.external_message_id,r.psid,r.page_id,r.message_text,r.status,r.note_id,r.received_at FROM facebook_message_receipts r JOIN social_identities i ON i.platform='facebook' AND i.status='active' AND i.platform_user_id=r.psid WHERE i.user_id=? ORDER BY r.received_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []FacebookMessage{}
+	for rows.Next() {
+		var m FacebookMessage
+		if err := rows.Scan(&m.ExternalMessageID, &m.SenderID, &m.PageID, &m.Text, &m.Status, &m.NoteID, &m.ReceivedAt); err != nil {
+			return nil, err
+		}
+		result = append(result, m)
+	}
+	return result, rows.Err()
+}
+
+func RecordFacebookMessage(ctx context.Context, db *sql.DB, pageID, psid, externalMessageID, text, status, now string) error {
+	if pageID == "" || psid == "" || externalMessageID == "" || now == "" || len(pageID) > 128 || len(psid) > 128 || len(externalMessageID) > 256 {
+		return nil
+	}
+	_, err := db.ExecContext(ctx, `INSERT INTO facebook_message_receipts (external_message_id,page_id,psid,received_at,message_text,status) VALUES (?,?,?,?,?,?) ON CONFLICT(external_message_id) DO UPDATE SET status=excluded.status`, externalMessageID, pageID, psid, now, text, status)
+	return err
+}
+
 func ProcessFacebookMessage(ctx context.Context, db *sql.DB, pageID, psid, externalMessageID, text string, echo, hasAttachments bool, now string) (FacebookMessageOutcome, error) {
 	_ = hasAttachments
 	if strings.TrimSpace(pageID) == "" || strings.TrimSpace(psid) == "" || strings.TrimSpace(externalMessageID) == "" || now == "" || len(pageID) > 128 || len(psid) > 128 || len(externalMessageID) > 256 || echo || strings.TrimSpace(text) == "" {
@@ -110,7 +145,7 @@ func ProcessFacebookMessage(ctx context.Context, db *sql.DB, pageID, psid, exter
 	if !configured {
 		return commitFacebookMessageOutcome(tx, FacebookMessageOutcome{Kind: FacebookMessageIgnored})
 	}
-	claim, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO facebook_message_receipts (external_message_id, page_id, psid, received_at) VALUES (?, ?, ?, ?)`, externalMessageID, pageID, psid, now)
+	claim, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO facebook_message_receipts (external_message_id, page_id, psid, received_at, message_text, status) VALUES (?, ?, ?, ?, ?, 'ignored')`, externalMessageID, pageID, psid, now, text)
 	if err != nil {
 		return FacebookMessageOutcome{}, err
 	}
@@ -128,7 +163,15 @@ func ProcessFacebookMessage(ctx context.Context, db *sql.DB, pageID, psid, exter
 		if len(consumedHash) == sha256.Size && subtle.ConstantTimeCompare(consumedHash, codeHash[:]) == 1 {
 			return commitFacebookMessageOutcome(tx, FacebookMessageOutcome{Kind: FacebookMessageDuplicate, IdentityID: identityID})
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO notes (user_id, social_identity_id, title, content_markdown, source, external_message_id) VALUES (?, ?, 'Facebook Messenger', ?, 'facebook', ?)`, userID, identityID, text, externalMessageID); err != nil {
+		result, err := tx.ExecContext(ctx, `INSERT INTO notes (user_id, social_identity_id, title, content_markdown, source, external_message_id) VALUES (?, ?, 'Facebook Messenger', ?, 'facebook', ?)`, userID, identityID, text, externalMessageID)
+		if err != nil {
+			return FacebookMessageOutcome{}, err
+		}
+		noteID, err := result.LastInsertId()
+		if err != nil {
+			return FacebookMessageOutcome{}, err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE facebook_message_receipts SET status='note_created', note_id=? WHERE external_message_id=?`, noteID, externalMessageID); err != nil {
 			return FacebookMessageOutcome{}, err
 		}
 		return commitFacebookMessageOutcome(tx, FacebookMessageOutcome{Kind: FacebookMessageNoteCreated, IdentityID: identityID})

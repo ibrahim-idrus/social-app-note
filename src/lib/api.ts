@@ -1,6 +1,7 @@
 export type User = { id: number; name: string; email: string; created_at: string; updated_at: string };
 export type MatchRange = { start: number; end: number };
 export type NoteSearchSection = { heading: string; heading_path: string[]; anchor: string; excerpt: string; matches: MatchRange[] };
+export type InstagramAttachment = { type: 'ig_post' | 'ig_reel'; url: string; media_id: string; alt: string };
 export type Note = {
 	id: number;
 	social_identity_id: number | null;
@@ -12,8 +13,10 @@ export type Note = {
 	updated_at: string;
 	title_matches?: MatchRange[];
 	sections?: NoteSearchSection[];
+	instagram_attachments: InstagramAttachment[];
 };
 export type NotesPage = { notes: Note[]; total: number; page: number; page_size: number };
+export type FacebookMessage = { external_message_id: string; sender_id: string; page_id: string; text: string; status: string; note_id: number | null; received_at: string };
 export type SocialPlatform = { id: string; name: string; available: boolean; search_enabled: boolean; inbox?: { instagram_user_id?: string; username?: string; page_id?: string } };
 export type SocialAccountMatch = { id: string; username: string; name: string; profile_picture_url: string };
 export type SocialIdentity = {
@@ -108,6 +111,7 @@ export function createApiClient(fetcher: Fetch = fetch, cookies = () => typeof d
 			if (source) params.set('source', source);
 			return request<NotesPage>(`/api/notes?${params}`);
 		},
+		facebookMessages: async () => (await request<{ messages: FacebookMessage[] }>('/api/facebook-messages')).messages,
 		getNote: (id: number) => request<Note>(`/api/notes/${id}`),
 		createNote: (input: { title: string; content: string }) => request<Note>('/api/notes', { method: 'POST', body: JSON.stringify({ title: input.title, content_markdown: input.content }) }),
 		updateNote: (id: number, input: { title: string; content: string }) => request<Note>(`/api/notes/${id}`, { method: 'PUT', body: JSON.stringify({ title: input.title, content_markdown: input.content }) }),

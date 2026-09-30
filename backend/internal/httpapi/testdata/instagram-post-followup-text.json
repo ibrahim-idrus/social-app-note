@@ -1,0 +1,24 @@
+{
+  "object": "instagram",
+  "entry": [
+    {
+      "time": 1790687769000,
+      "id": "INBOX_ID",
+      "messaging": [
+        {
+          "sender": {
+            "id": "VERIFIED_SENDER_ID"
+          },
+          "recipient": {
+            "id": "INBOX_ID"
+          },
+          "timestamp": 1790687769000,
+          "message": {
+            "mid": "TEXT_MID",
+            "text": "Redacted follow-up text"
+          }
+        }
+      ]
+    }
+  ]
+}

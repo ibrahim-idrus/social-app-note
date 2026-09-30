@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -25,10 +26,52 @@ type instagramWebhookEvent struct {
 		ID string `json:"id"`
 	} `json:"recipient"`
 	Message struct {
-		MID    string `json:"mid"`
-		Text   string `json:"text"`
-		IsEcho bool   `json:"is_echo"`
+		MID         string `json:"mid"`
+		Text        string `json:"text"`
+		IsEcho      bool   `json:"is_echo"`
+		Attachments []struct {
+			Type    string `json:"type"`
+			Payload struct {
+				InstagramMediaID string `json:"ig_post_media_id"`
+				ReelVideoID      string `json:"reel_video_id"`
+				Title            string `json:"title"`
+				URL              string `json:"url"`
+			} `json:"payload"`
+		} `json:"attachments"`
 	} `json:"message"`
+}
+
+type instagramWebhookPayload struct {
+	Object string `json:"object"`
+	Entry  []struct {
+		ID        string                  `json:"id"`
+		Messaging []instagramWebhookEvent `json:"messaging"`
+		Changes   []struct {
+			Field string                `json:"field"`
+			Value instagramWebhookEvent `json:"value"`
+		} `json:"changes"`
+	} `json:"entry"`
+}
+
+func supportedInstagramAttachments(items []struct {
+	Type    string `json:"type"`
+	Payload struct {
+		InstagramMediaID string `json:"ig_post_media_id"`
+		ReelVideoID      string `json:"reel_video_id"`
+		Title            string `json:"title"`
+		URL              string `json:"url"`
+	} `json:"payload"`
+}) []store.InstagramAttachment {
+	result := []store.InstagramAttachment{}
+	for _, item := range items {
+		u, err := url.Parse(item.Payload.URL)
+		if item.Type == "ig_post" && item.Payload.InstagramMediaID != "" && err == nil && u.Scheme == "https" && u.Hostname() == "lookaside.fbsbx.com" {
+			result = append(result, store.InstagramAttachment{Type: item.Type, URL: item.Payload.URL, InstagramMediaID: item.Payload.InstagramMediaID, Alt: item.Payload.Title})
+		} else if item.Type == "ig_reel" && item.Payload.ReelVideoID != "" && err == nil && u.Scheme == "https" && (u.Hostname() == "instagram.com" || u.Hostname() == "www.instagram.com") {
+			result = append(result, store.InstagramAttachment{Type: item.Type, URL: item.Payload.URL, InstagramMediaID: item.Payload.ReelVideoID, Alt: item.Payload.Title})
+		}
+	}
+	return result
 }
 
 func (api *API) instagramWebhookVerify(w http.ResponseWriter, r *http.Request) {
@@ -87,17 +130,7 @@ func (api *API) instagramWebhook(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	var payload struct {
-		Object string `json:"object"`
-		Entry  []struct {
-			ID        string                  `json:"id"`
-			Messaging []instagramWebhookEvent `json:"messaging"`
-			Changes   []struct {
-				Field string                `json:"field"`
-				Value instagramWebhookEvent `json:"value"`
-			} `json:"changes"`
-		} `json:"entry"`
-	}
+	var payload instagramWebhookPayload
 	if err := json.Unmarshal(body, &payload); err != nil {
 		result = "malformed_json"
 		writeError(w, http.StatusBadRequest, "invalid_input")
@@ -136,7 +169,13 @@ func (api *API) instagramWebhook(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			log.Printf("instagram webhook event type=text entry=%s sender=%s recipient=%s message=%s", webhookID(entry.ID), webhookID(event.Sender.ID), webhookID(event.Recipient.ID), webhookID(event.Message.MID))
-			if err := api.processInstagramText(r.Context(), event.Recipient.ID, event.Sender.ID, event.Message.MID, event.Message.Text); err != nil {
+			attachments := supportedInstagramAttachments(event.Message.Attachments)
+			if len(attachments) > 0 {
+				_, err = store.ProcessInstagramMessage(r.Context(), api.db, event.Recipient.ID, event.Sender.ID, event.Message.MID, event.Message.Text, attachments, time.Now().UTC().Format(time.RFC3339Nano))
+			} else {
+				err = api.processInstagramText(r.Context(), event.Recipient.ID, event.Sender.ID, event.Message.MID, event.Message.Text)
+			}
+			if err != nil {
 				failed++
 				result = "processing_failed"
 				writeError(w, http.StatusInternalServerError, "internal_error")
@@ -153,7 +192,7 @@ func instagramWebhookIgnoreReason(event instagramWebhookEvent) string {
 	switch {
 	case event.Message.IsEcho:
 		return "echo"
-	case event.Message.Text == "":
+	case event.Message.Text == "" && len(supportedInstagramAttachments(event.Message.Attachments)) == 0:
 		return "missing_text"
 	case event.Message.MID == "":
 		return "missing_message_id"

@@ -82,6 +82,27 @@ func TestFacebookWebhookProcessesSignedMessengerMessage(t *testing.T) {
 	}
 }
 
+func TestFacebookMessagesAPIListsOwnedReceiptsAndRequiresAuthentication(t *testing.T) {
+	h, db := facebookWebhookHandler(t)
+	if w := facebookWebhookRequest(h, facebookPayload("page-private-123", "sender-private-456", "message-list-1", "listed message", false, false), "app-secret"); w.Code != http.StatusOK {
+		t.Fatal(w.Code)
+	}
+	anonymous := httptest.NewRecorder()
+	h.ServeHTTP(anonymous, httptest.NewRequest(http.MethodGet, "/api/facebook-messages", nil))
+	if anonymous.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous = %d", anonymous.Code)
+	}
+	c := newTestClientWithHandler(t, h)
+	c.register(t, "Owner", "owner-list@example.com")
+	if _, err := db.Exec(`UPDATE social_identities SET user_id=? WHERE platform='facebook' AND platform_user_id='sender-private-456'`, 2); err != nil {
+		t.Fatal(err)
+	}
+	res := c.request(t, http.MethodGet, "/api/facebook-messages", nil, false)
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"text":"listed message"`) || !strings.Contains(res.Body.String(), `"status":"note_created"`) {
+		t.Fatalf("list = %d %s", res.Code, res.Body.String())
+	}
+}
+
 func TestFacebookWebhookRejectsInvalidSignature(t *testing.T) {
 	h, db := facebookWebhookHandler(t)
 	w := facebookWebhookRequest(h, facebookPayload("page-private-123", "sender-private-456", "message-private-789", "must not save", false, false), "wrong-secret")
@@ -109,6 +130,10 @@ func TestFacebookWebhookIgnoresUnsupportedEvents(t *testing.T) {
 	var count int
 	if err := db.QueryRow(`SELECT count(*) FROM notes`).Scan(&count); err != nil || count != 0 {
 		t.Fatalf("notes=%d err=%v", count, err)
+	}
+	var ignored int
+	if err := db.QueryRow(`SELECT count(*) FROM facebook_message_receipts WHERE status='ignored' AND message_text IN ('echo text', 'wrong page', '')`).Scan(&ignored); err != nil || ignored != 3 {
+		t.Fatalf("ignored receipts=%d err=%v", ignored, err)
 	}
 }
 
