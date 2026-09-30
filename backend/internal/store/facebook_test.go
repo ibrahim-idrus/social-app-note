@@ -34,7 +34,7 @@ func newFacebookStoreTest(t *testing.T) *sql.DB {
 func pendingFacebookIdentity(t *testing.T, db *sql.DB, userID int64, code string, expires time.Time) int64 {
 	t.Helper()
 	hash := sha256.Sum256([]byte(code))
-	identity, err := CreatePendingFacebookIdentity(context.Background(), db, userID, hash[:], expires.UTC().Format(time.RFC3339Nano))
+	identity, err := CreatePendingFacebookIdentity(context.Background(), db, userID, "facebook-user", hash[:], expires.UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +238,7 @@ func TestFacebookPendingIdentityIsOnePerUserAndRegenerationIsPlatformSpecific(t 
 	db := newFacebookStoreTest(t)
 	now := time.Now().UTC()
 	id := pendingFacebookIdentity(t, db, 1, "first", now.Add(time.Minute))
-	if _, err := CreatePendingFacebookIdentity(context.Background(), db, 1, []byte("hash"), now.Add(time.Minute).Format(time.RFC3339Nano)); !errors.Is(err, ErrPlatformIdentityAlreadyRegistered) {
+	if _, err := CreatePendingFacebookIdentity(context.Background(), db, 1, "another-user", []byte("hash"), now.Add(time.Minute).Format(time.RFC3339Nano)); !errors.Is(err, ErrPlatformIdentityAlreadyRegistered) {
 		t.Fatalf("duplicate Facebook identity error=%v", err)
 	}
 	hash := sha256.Sum256([]byte("replacement"))

@@ -69,8 +69,8 @@ func GetFacebookIntegration(ctx context.Context, db *sql.DB) (FacebookIntegratio
 	return integration, err
 }
 
-func CreatePendingFacebookIdentity(ctx context.Context, db *sql.DB, userID int64, codeHash []byte, expiresAt string) (SocialIdentity, error) {
-	return CreatePendingSocialIdentity(ctx, db, userID, "facebook", "", "", "", "", codeHash, expiresAt)
+func CreatePendingFacebookIdentity(ctx context.Context, db *sql.DB, userID int64, username string, codeHash []byte, expiresAt string) (SocialIdentity, error) {
+	return CreatePendingSocialIdentity(ctx, db, userID, "facebook", "", username, "", "", codeHash, expiresAt)
 }
 
 func ReplaceFacebookIdentityVerification(ctx context.Context, db *sql.DB, userID, id int64, codeHash []byte, expiresAt string) (SocialIdentity, error) {

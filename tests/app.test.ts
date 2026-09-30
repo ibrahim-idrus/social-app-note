@@ -159,6 +159,8 @@ test('Facebook Messenger settings use the configured Page and platform-specific 
 	assert.match(source, /Facebook Messenger connected/);
 	assert.match(source, /Regenerate code/);
 	assert.match(source, /Remove account/);
+	assert.match(source, /createSocialIdentity\(platform\.id, username\.trim\(\)\)/);
+	assert.match(source, /onclick=\{\(\) => selectedPlatform = platform\}/);
 	assert.doesNotMatch(source, /Threads/i);
 });
 

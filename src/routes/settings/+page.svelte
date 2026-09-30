@@ -33,7 +33,7 @@
 		if (!platform) return;
 		error = '';
 		try {
-			registration = await api.createSocialIdentity(platform.id, platform.id === 'instagram' ? username.trim() : '');
+			registration = await api.createSocialIdentity(platform.id, username.trim());
 			identities = [...identities, registration];
 			username = '';
 			selectedPlatform = null;
@@ -165,7 +165,7 @@
 					{:else if availablePlatforms.length}
 						<div class="toolbar">
 							{#each availablePlatforms as platform (platform.id)}
-								<Button variant="outline" onclick={() => platform.id === 'facebook' ? add(platform) : selectedPlatform = platform}><Plus />Add platform: {platform.name}</Button>
+								<Button variant="outline" onclick={() => selectedPlatform = platform}><Plus />Add platform: {platform.name}</Button>
 							{/each}
 						</div>
 					{:else}

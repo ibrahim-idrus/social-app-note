@@ -78,5 +78,34 @@ func Migrate(db *sql.DB) error {
 			return fmt.Errorf("commit migration %s: %w", entry.Name(), err)
 		}
 	}
-	return nil
+	// 0006_facebook_messenger rebuilt notes without the attachment column when
+	// applied after 0006_instagram_attachments on existing databases.
+	return ensureColumn(db, "notes", "instagram_attachments_json", "TEXT")
+}
+
+func ensureColumn(db *sql.DB, table, column, definition string) error {
+	rows, err := db.Query(`PRAGMA table_info(` + table + `)`)
+	if err != nil {
+		return err
+	}
+	found := false
+	for rows.Next() {
+		var cid int
+		var name, kind string
+		var notnull, pk int
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &kind, &notnull, &defaultValue, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		found = found || name == column
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if found {
+		return nil
+	}
+	_, err = db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + column + ` ` + definition)
+	return err
 }

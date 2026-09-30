@@ -138,7 +138,8 @@ func (api *API) createSocialIdentity(w http.ResponseWriter, r *http.Request, aut
 		return
 	}
 	if input.Platform == "facebook" {
-		if !api.facebookMessengerEnabled || input.PlatformUserID != "" || input.Username != "" {
+		username := strings.TrimSpace(input.Username)
+		if !api.facebookMessengerEnabled || input.PlatformUserID != "" || username == "" || len(username) > 255 {
 			writeError(w, http.StatusBadRequest, "invalid_input")
 			return
 		}
@@ -147,7 +148,7 @@ func (api *API) createSocialIdentity(w http.ResponseWriter, r *http.Request, aut
 			writeError(w, http.StatusInternalServerError, "internal_error")
 			return
 		}
-		identity, err := store.CreatePendingFacebookIdentity(r.Context(), api.db, auth.ID, codeHash, expiresAt)
+		identity, err := store.CreatePendingFacebookIdentity(r.Context(), api.db, auth.ID, username, codeHash, expiresAt)
 		if errors.Is(err, store.ErrPlatformIdentityAlreadyRegistered) {
 			writeError(w, http.StatusConflict, "facebook_identity_already_registered")
 			return

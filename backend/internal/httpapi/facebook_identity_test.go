@@ -59,9 +59,12 @@ func TestFacebookIdentityAuthenticationCSRFCreateListRegenerateAndRemove(t *test
 	if got := c.request(t, http.MethodPost, "/api/social-identities", map[string]string{"platform": "facebook"}, false).Code; got != http.StatusForbidden {
 		t.Fatalf("create without CSRF=%d", got)
 	}
-	created := c.request(t, http.MethodPost, "/api/social-identities", map[string]string{"platform": "facebook"}, true)
+	created := c.request(t, http.MethodPost, "/api/social-identities", map[string]string{"platform": "facebook", "username": "Alice Example"}, true)
 	if created.Code != http.StatusCreated {
 		t.Fatalf("create=%d %s", created.Code, created.Body.String())
+	}
+	if !strings.Contains(created.Body.String(), `"username":"Alice Example"`) {
+		t.Fatalf("Facebook username was not persisted: %s", created.Body.String())
 	}
 	var registration struct {
 		ID                  int64  `json:"id"`
