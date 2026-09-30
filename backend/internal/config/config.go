@@ -152,7 +152,16 @@ func Load(path string) (Config, error) {
 		InstagramWebhookVerifyToken: values["INSTAGRAM_WEBHOOK_VERIFY_TOKEN"], InstagramAccessToken: values["INSTAGRAM_ACCESS_TOKEN"],
 		InstagramInboxOwnerEmail:   values["INSTAGRAM_INBOX_OWNER_EMAIL"],
 		InstagramUser2AccountID:    values["INSTAGRAM_USER2_ACCOUNT_ID"],
-		FacebookWebhookVerifyToken: values["FACEBOOK_WEBHOOK_VERIFY_TOKEN"],
+		FacebookWebhookVerifyToken: firstNonEmpty(values["FACEBOOK_WEBHOOK_VERIFY_TOKEN"], values["FACEBOOK_MESSENGER_WEBHOOK_TOKEN"]),
 		AppID:                      values["APP_ID"], AppSecret: values["APP_SECRET"],
 	}, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
