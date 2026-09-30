@@ -41,7 +41,8 @@ type API struct {
 	productName                                     string
 	httpClient                                      *http.Client
 	instagramWebhookVerifyToken, instagramAppSecret string
-	facebookWebhookVerifyToken                      string
+	facebookWebhookVerifyToken, facebookAppSecret   string
+	facebookPageID                                  string
 }
 
 type authentication struct {

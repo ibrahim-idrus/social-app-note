@@ -51,7 +51,7 @@ func TestLoadFacebookMessengerWebhookToken(t *testing.T) {
 	}
 
 	path := filepath.Join(t.TempDir(), ".env")
-	contents := "HTTP_ADDR=127.0.0.1:8080\nDATABASE_PATH=sqlite.db\nSESSION_COOKIE_SECURE=false\nINSTAGRAM_ENABLED=false\nFACEBOOK_MESSENGER_WEBHOOK_TOKEN=messenger-secret\n"
+	contents := "HTTP_ADDR=127.0.0.1:8080\nDATABASE_PATH=sqlite.db\nSESSION_COOKIE_SECURE=false\nINSTAGRAM_ENABLED=false\nFACEBOOK_MESSENGER_WEBHOOK_TOKEN=messenger-secret\nMESSENGER_PAGE_ID=page-123\nAPP_SECRET=app-secret\n"
 	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -61,5 +61,8 @@ func TestLoadFacebookMessengerWebhookToken(t *testing.T) {
 	}
 	if got.FacebookWebhookVerifyToken != "messenger-secret" {
 		t.Fatalf("FacebookWebhookVerifyToken was not loaded from messenger alias")
+	}
+	if got.FacebookPageID != "page-123" || got.AppSecret != "app-secret" {
+		t.Fatalf("Facebook POST config was not loaded")
 	}
 }

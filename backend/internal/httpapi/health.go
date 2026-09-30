@@ -13,7 +13,8 @@ type Options struct {
 	SecureCookies                                               bool
 	InstagramAccountID, InstagramUsername, InstagramAccessToken string
 	InstagramWebhookVerifyToken, InstagramAppSecret             string
-	FacebookWebhookVerifyToken                                  string
+	FacebookWebhookVerifyToken, FacebookAppSecret               string
+	FacebookPageID                                              string
 	InstagramGraphVersion, ProductName                          string
 	// Optional trace aid: expected sender ID, logged by webhook, never used for lookup.
 	InstagramUser2AccountID string
@@ -35,8 +36,11 @@ func Handler(db *sql.DB, options ...Options) http.Handler {
 	if option.ProductName == "" {
 		option.ProductName = "NoteDesk"
 	}
-	api := &API{db: db, secureCookies: option.SecureCookies, limiter: newLoginLimiter(), instagramAccountID: option.InstagramAccountID, instagramAccessToken: option.InstagramAccessToken, instagramGraphVersion: option.InstagramGraphVersion, productName: option.ProductName, httpClient: client, instagramWebhookVerifyToken: option.InstagramWebhookVerifyToken, instagramAppSecret: option.InstagramAppSecret, instagramUser2AccountID: option.InstagramUser2AccountID, facebookWebhookVerifyToken: option.FacebookWebhookVerifyToken}
+	api := &API{db: db, secureCookies: option.SecureCookies, limiter: newLoginLimiter(), instagramAccountID: option.InstagramAccountID, instagramAccessToken: option.InstagramAccessToken, instagramGraphVersion: option.InstagramGraphVersion, productName: option.ProductName, httpClient: client, instagramWebhookVerifyToken: option.InstagramWebhookVerifyToken, instagramAppSecret: option.InstagramAppSecret, instagramUser2AccountID: option.InstagramUser2AccountID, facebookWebhookVerifyToken: option.FacebookWebhookVerifyToken, facebookAppSecret: option.FacebookAppSecret, facebookPageID: option.FacebookPageID}
 	_ = store.ConfigureInstagramIntegration(context.Background(), db, option.InstagramAccountID, option.InstagramUsername, option.InstagramAccessToken)
+	if option.FacebookPageID != "" {
+		_ = store.ConfigureFacebookIntegration(context.Background(), db, option.FacebookPageID)
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
@@ -61,6 +65,7 @@ func Handler(db *sql.DB, options ...Options) http.Handler {
 	mux.HandleFunc("GET /api/integrations/instagram/webhook", api.instagramWebhookVerify)
 	mux.HandleFunc("POST /api/integrations/instagram/webhook", api.instagramWebhook)
 	mux.HandleFunc("GET /api/integrations/facebook/webhook", api.facebookWebhookVerify)
+	mux.HandleFunc("POST /api/integrations/facebook/webhook", api.facebookWebhook)
 
 	mux.HandleFunc("GET /api/notes", api.authenticated(api.listNotes, false))
 	mux.HandleFunc("POST /api/notes", api.authenticated(api.createNote, true))

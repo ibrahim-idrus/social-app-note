@@ -118,7 +118,8 @@ func CreatePendingSocialIdentity(ctx context.Context, db *sql.DB, userID int64, 
 		if strings.Contains(message, "social_identities.user_id, social_identities.platform") {
 			return SocialIdentity{}, ErrPlatformIdentityAlreadyRegistered
 		}
-		if strings.Contains(message, "social_identities.platform, social_identities.normalized_username") ||
+		if strings.Contains(message, "social_identities.normalized_username") ||
+			strings.Contains(message, "social_identities.platform, social_identities.normalized_username") ||
 			strings.Contains(message, "social_identities.platform, social_identities.platform_user_id") {
 			return SocialIdentity{}, ErrIdentityUnavailable
 		}
