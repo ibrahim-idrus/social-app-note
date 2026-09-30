@@ -1,13 +1,17 @@
 package httpapi
 
 import (
+	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -101,6 +105,14 @@ func (api *API) facebookWebhook(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusInternalServerError, "internal_error")
 				return
 			}
+			if outcome.OwnsReply {
+				sent := api.sendFacebookText(r.Context(), event.Sender.ID, "Your Facebook Messenger account is connected to "+api.productName+".") == nil
+				if err := store.RecordFacebookVerificationReply(r.Context(), api.db, event.Message.MID, time.Now().UTC().Format(time.RFC3339Nano), sent); err != nil {
+					requestResult = "processing_failed"
+					writeError(w, http.StatusInternalServerError, "internal_error")
+					return
+				}
+			}
 			requestResult = string(outcome.Kind)
 			log.Printf("facebook webhook event result sender=%s recipient=%s page=%s message=%s processing_ran=true processing_result=%s", sender, recipient, page, messageID, outcome.Kind)
 		}
@@ -109,6 +121,31 @@ func (api *API) facebookWebhook(w http.ResponseWriter, r *http.Request) {
 		requestResult = "ignored"
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func (api *API) sendFacebookText(ctx context.Context, recipient, text string) error {
+	if api.facebookPageAccessToken == "" {
+		return errors.New("facebook page access token unavailable")
+	}
+	payload, err := json.Marshal(map[string]any{"recipient": map[string]string{"id": recipient}, "messaging_type": "RESPONSE", "message": map[string]string{"text": text}})
+	if err != nil {
+		return err
+	}
+	endpoint := "https://graph.facebook.com/" + url.PathEscape(api.facebookGraphVersion) + "/me/messages?access_token=" + url.QueryEscape(api.facebookPageAccessToken)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := api.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return errors.New("facebook confirmation failed")
+	}
+	return nil
 }
 
 func validFacebookSignature(body []byte, signature, secret string) bool {

@@ -51,6 +51,7 @@ func main() {
 			InstagramWebhookVerifyToken: cfg.InstagramWebhookVerifyToken, InstagramAppSecret: cfg.InstagramAppSecret,
 			FacebookWebhookVerifyToken: cfg.FacebookWebhookVerifyToken,
 			FacebookAppSecret:          cfg.AppSecret, FacebookPageID: cfg.FacebookPageID,
+			FacebookPageAccessToken: cfg.FacebookPageAccessToken, FacebookGraphVersion: cfg.FacebookGraphVersion,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 	}

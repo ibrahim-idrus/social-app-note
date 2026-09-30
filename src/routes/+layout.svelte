@@ -9,5 +9,5 @@
 	let publicRoute = $derived(page.route.id === '/login' || page.route.id === '/register');
 </script>
 
-<svelte:head><base href={`${base}/`} /><link rel="icon" href={favicon} /><title>NoteDesk</title><meta name="description" content="Capture and organize notes from your desk or Instagram inbox." /></svelte:head>
+<svelte:head><base href={`${base}/`} /><link rel="icon" href={favicon} /><title>NoteDesk</title><meta name="description" content="Capture and organize notes manually or from Instagram and Facebook Messenger." /></svelte:head>
 {#if publicRoute}{@render children()}{:else}<AppShell>{@render children()}</AppShell>{/if}

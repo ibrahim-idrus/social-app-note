@@ -28,7 +28,7 @@
 <div class="auth-page">
 	<section class="auth-side">
 		<a class="brand" href={resolve('/login')}><span class="brand-mark"><BookOpenText size={18} /></span>NoteDesk</a>
-		<div class="auth-quote"><p>Keep the useful things you find, without breaking your flow.</p><small>Manual notes and a dedicated Instagram inbox, in one quiet workspace.</small></div>
+		<div class="auth-quote"><p>Keep the useful things you find, without breaking your flow.</p><small>Manual notes and Instagram or Facebook Messenger social inboxes, in one quiet workspace.</small></div>
 		<small>Your notes stay in your private workspace.</small>
 	</section>
 	<main class="auth-main">

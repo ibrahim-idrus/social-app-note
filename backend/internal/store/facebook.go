@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"time"
 )
 
 type FacebookIntegration struct {
@@ -27,6 +28,7 @@ const (
 type FacebookMessageOutcome struct {
 	Kind       FacebookMessageOutcomeKind
 	IdentityID int64
+	OwnsReply  bool
 }
 
 func ConfigureFacebookIntegration(ctx context.Context, db *sql.DB, pageID string) error {
@@ -163,7 +165,16 @@ func ProcessFacebookMessage(ctx context.Context, db *sql.DB, pageID, psid, exter
 		if len(consumedHash) == sha256.Size && subtle.ConstantTimeCompare(consumedHash, codeHash[:]) == 1 {
 			return commitFacebookMessageOutcome(tx, FacebookMessageOutcome{Kind: FacebookMessageDuplicate, IdentityID: identityID})
 		}
-		result, err := tx.ExecContext(ctx, `INSERT INTO notes (user_id, social_identity_id, title, content_markdown, source, external_message_id) VALUES (?, ?, 'Facebook Messenger', ?, 'facebook', ?)`, userID, identityID, text, externalMessageID)
+		instant, err := time.Parse(time.RFC3339Nano, now)
+		if err != nil {
+			return FacebookMessageOutcome{}, err
+		}
+		jakarta, err := time.LoadLocation("Asia/Jakarta")
+		if err != nil {
+			return FacebookMessageOutcome{}, err
+		}
+		title := "Facebook Messenger " + instant.In(jakarta).Format("01/02/2006 15:04")
+		result, err := tx.ExecContext(ctx, `INSERT INTO notes (user_id, social_identity_id, title, content_markdown, source, external_message_id) VALUES (?, ?, ?, ?, 'facebook', ?)`, userID, identityID, title, text, externalMessageID)
 		if err != nil {
 			return FacebookMessageOutcome{}, err
 		}
@@ -195,6 +206,15 @@ func ProcessFacebookMessage(ctx context.Context, db *sql.DB, pageID, psid, exter
 		}
 		return commitFacebookMessageOutcome(tx, FacebookMessageOutcome{Kind: FacebookMessageExpired, IdentityID: pendingID})
 	}
+	claimReply, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO facebook_verification_replies (external_message_id, social_identity_id, result) VALUES (?, ?, 'claimed')`, externalMessageID, pendingID)
+	if err != nil {
+		return FacebookMessageOutcome{}, err
+	}
+	if count, err := claimReply.RowsAffected(); err != nil {
+		return FacebookMessageOutcome{}, err
+	} else if count == 0 {
+		return commitFacebookMessageOutcome(tx, FacebookMessageOutcome{Kind: FacebookMessageDuplicate, IdentityID: pendingID})
+	}
 	result, err := tx.ExecContext(ctx, `
 		UPDATE social_identities SET platform_user_id=?, status='active', verified_at=?, verification_consumed_at=?, updated_at=?
 		WHERE id=? AND status='pending' AND verification_consumed_at IS NULL`, psid, now, now, now, pendingID)
@@ -213,7 +233,34 @@ func ProcessFacebookMessage(ctx context.Context, db *sql.DB, pageID, psid, exter
 		}
 		return FacebookMessageOutcome{}, errors.New("facebook verification activation lost pending identity")
 	}
-	return commitFacebookMessageOutcome(tx, FacebookMessageOutcome{Kind: FacebookMessageActivated, IdentityID: pendingID})
+	return commitFacebookMessageOutcome(tx, FacebookMessageOutcome{Kind: FacebookMessageActivated, IdentityID: pendingID, OwnsReply: true})
+}
+
+func RecordFacebookVerificationReply(ctx context.Context, db *sql.DB, externalMessageID, attemptedAt string, sent bool) error {
+	result := "sent"
+	if !sent {
+		result = "system_failure"
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	update, err := tx.ExecContext(ctx, `UPDATE facebook_verification_replies SET attempted_at=?, result=? WHERE external_message_id=? AND result='claimed'`, attemptedAt, result, externalMessageID)
+	if err != nil {
+		return err
+	}
+	if count, err := update.RowsAffected(); err != nil {
+		return err
+	} else if count != 1 {
+		return errors.New("verification reply claim unavailable")
+	}
+	if !sent {
+		if _, err := tx.ExecContext(ctx, `UPDATE social_identities SET verification_result='system_failure', verification_result_at=?, updated_at=? WHERE id=(SELECT social_identity_id FROM facebook_verification_replies WHERE external_message_id=?)`, attemptedAt, attemptedAt, externalMessageID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func commitFacebookMessageOutcome(tx *sql.Tx, outcome FacebookMessageOutcome) (FacebookMessageOutcome, error) {

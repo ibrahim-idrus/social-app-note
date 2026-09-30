@@ -82,6 +82,51 @@ func TestFacebookWebhookProcessesSignedMessengerMessage(t *testing.T) {
 	}
 }
 
+func TestFacebookWebhookSavesTextAndIgnoresAttachedMedia(t *testing.T) {
+	h, db := facebookWebhookHandler(t)
+	body := facebookPayload("page-private-123", "sender-private-456", "text-with-media", "keep only this text", false, true)
+	w := facebookWebhookRequest(h, body, "app-secret")
+	if w.Code != http.StatusOK {
+		t.Fatalf("POST status=%d body=%s", w.Code, w.Body.String())
+	}
+	var content string
+	if err := db.QueryRow(`SELECT content_markdown FROM notes WHERE external_message_id='text-with-media'`).Scan(&content); err != nil {
+		t.Fatal(err)
+	}
+	if content != "keep only this text" {
+		t.Fatalf("note content=%q", content)
+	}
+}
+
+func TestFacebookNoteCanBeViewedAndUpdatedByItsOwner(t *testing.T) {
+	h, db := facebookWebhookHandler(t)
+	c := newTestClientWithHandler(t, h)
+	c.register(t, "Owner", "facebook-note-owner@example.com")
+	if _, err := db.Exec(`UPDATE social_identities SET user_id=? WHERE platform='facebook' AND platform_user_id='sender-private-456'`, 2); err != nil {
+		t.Fatal(err)
+	}
+	if w := facebookWebhookRequest(h, facebookPayload("page-private-123", "sender-private-456", "editable-facebook-note", "original Facebook text", false, false), "app-secret"); w.Code != http.StatusOK {
+		t.Fatalf("webhook=%d %s", w.Code, w.Body.String())
+	}
+	var noteID int
+	if err := db.QueryRow(`SELECT id FROM notes WHERE external_message_id='editable-facebook-note'`).Scan(&noteID); err != nil {
+		t.Fatal(err)
+	}
+	path := "/api/notes/" + strconv.Itoa(noteID)
+	view := c.request(t, http.MethodGet, path, nil, false)
+	if view.Code != http.StatusOK || !strings.Contains(view.Body.String(), `"source":"facebook"`) || !strings.Contains(view.Body.String(), `"content_markdown":"original Facebook text"`) {
+		t.Fatalf("detail=%d %s", view.Code, view.Body.String())
+	}
+	updated := c.request(t, http.MethodPut, path, map[string]string{"title": "Updated Facebook note", "content_markdown": "edited Facebook text"}, true)
+	if updated.Code != http.StatusOK || !strings.Contains(updated.Body.String(), `"title":"Updated Facebook note"`) || !strings.Contains(updated.Body.String(), `"source":"facebook"`) {
+		t.Fatalf("update=%d %s", updated.Code, updated.Body.String())
+	}
+	reloaded := c.request(t, http.MethodGet, path, nil, false)
+	if reloaded.Code != http.StatusOK || !strings.Contains(reloaded.Body.String(), `"content_markdown":"edited Facebook text"`) || !strings.Contains(reloaded.Body.String(), `"source":"facebook"`) {
+		t.Fatalf("reloaded detail=%d %s", reloaded.Code, reloaded.Body.String())
+	}
+}
+
 func TestFacebookMessagesAPIListsOwnedReceiptsAndRequiresAuthentication(t *testing.T) {
 	h, db := facebookWebhookHandler(t)
 	if w := facebookWebhookRequest(h, facebookPayload("page-private-123", "sender-private-456", "message-list-1", "listed message", false, false), "app-secret"); w.Code != http.StatusOK {

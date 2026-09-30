@@ -21,6 +21,7 @@ type Config struct {
 	FacebookWebhookVerifyToken                              string
 	FacebookMessengerEnabled                                bool
 	FacebookPageID                                          string
+	FacebookPageAccessToken, FacebookGraphVersion           string
 	// Optional trace aid only: expected DM sender (test account). Never used
 	// for inbox lookup; sender identity resolves via platform_user_id.
 	InstagramUser2AccountID string
@@ -49,6 +50,7 @@ var supported = map[string]bool{
 	"MESSENGER_PAGE_ID":                true,
 	"MESSENGER_PAGE_ACCESS_TOKEN":      true,
 	"FACEBOOK_MESSENGER_WEBHOOK_TOKEN": true,
+	"FACEBOOK_GRAPH_VERSION":           true,
 	// Accepted-and-ignored legacy keys: kept so existing .env files load.
 	// No poller exists (webhook-only inbound, see main_test.go), user tokens
 	// are unused (only the dedicated token calls the API), and USER1 is
@@ -144,6 +146,13 @@ func Load(path string) (Config, error) {
 		}
 	}
 	facebookConfigured := values["MESSENGER_PAGE_ID"] != ""
+	if facebookConfigured && values["MESSENGER_PAGE_ACCESS_TOKEN"] == "" {
+		return Config{}, fmt.Errorf("MESSENGER_PAGE_ACCESS_TOKEN is required when Facebook Messenger is configured")
+	}
+	facebookGraphVersion := values["FACEBOOK_GRAPH_VERSION"]
+	if facebookGraphVersion == "" {
+		facebookGraphVersion = "v26.0"
+	}
 
 	return Config{
 		HTTPAddr:            values["HTTP_ADDR"],
@@ -158,6 +167,8 @@ func Load(path string) (Config, error) {
 		FacebookWebhookVerifyToken: firstNonEmpty(values["FACEBOOK_WEBHOOK_VERIFY_TOKEN"], values["FACEBOOK_MESSENGER_WEBHOOK_TOKEN"]),
 		FacebookMessengerEnabled:   facebookConfigured,
 		FacebookPageID:             values["MESSENGER_PAGE_ID"],
+		FacebookPageAccessToken:    values["MESSENGER_PAGE_ACCESS_TOKEN"],
+		FacebookGraphVersion:       facebookGraphVersion,
 		AppID:                      values["APP_ID"], AppSecret: values["APP_SECRET"],
 	}, nil
 }

@@ -43,6 +43,7 @@ type API struct {
 	instagramWebhookVerifyToken, instagramAppSecret string
 	facebookWebhookVerifyToken, facebookAppSecret   string
 	facebookPageID                                  string
+	facebookPageAccessToken, facebookGraphVersion   string
 	facebookMessengerEnabled                        bool
 }
 

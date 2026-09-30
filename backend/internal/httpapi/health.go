@@ -15,6 +15,7 @@ type Options struct {
 	InstagramWebhookVerifyToken, InstagramAppSecret             string
 	FacebookWebhookVerifyToken, FacebookAppSecret               string
 	FacebookPageID                                              string
+	FacebookPageAccessToken, FacebookGraphVersion               string
 	InstagramGraphVersion, ProductName                          string
 	// Optional trace aid: expected sender ID, logged by webhook, never used for lookup.
 	InstagramUser2AccountID string
@@ -36,8 +37,11 @@ func Handler(db *sql.DB, options ...Options) http.Handler {
 	if option.ProductName == "" {
 		option.ProductName = "NoteDesk"
 	}
+	if option.FacebookGraphVersion == "" {
+		option.FacebookGraphVersion = "v26.0"
+	}
 	facebookEnabled := option.FacebookPageID != ""
-	api := &API{db: db, secureCookies: option.SecureCookies, limiter: newLoginLimiter(), instagramAccountID: option.InstagramAccountID, instagramAccessToken: option.InstagramAccessToken, instagramGraphVersion: option.InstagramGraphVersion, productName: option.ProductName, httpClient: client, instagramWebhookVerifyToken: option.InstagramWebhookVerifyToken, instagramAppSecret: option.InstagramAppSecret, instagramUser2AccountID: option.InstagramUser2AccountID, facebookWebhookVerifyToken: option.FacebookWebhookVerifyToken, facebookAppSecret: option.FacebookAppSecret, facebookPageID: option.FacebookPageID, facebookMessengerEnabled: facebookEnabled}
+	api := &API{db: db, secureCookies: option.SecureCookies, limiter: newLoginLimiter(), instagramAccountID: option.InstagramAccountID, instagramAccessToken: option.InstagramAccessToken, instagramGraphVersion: option.InstagramGraphVersion, productName: option.ProductName, httpClient: client, instagramWebhookVerifyToken: option.InstagramWebhookVerifyToken, instagramAppSecret: option.InstagramAppSecret, instagramUser2AccountID: option.InstagramUser2AccountID, facebookWebhookVerifyToken: option.FacebookWebhookVerifyToken, facebookAppSecret: option.FacebookAppSecret, facebookPageID: option.FacebookPageID, facebookPageAccessToken: option.FacebookPageAccessToken, facebookGraphVersion: option.FacebookGraphVersion, facebookMessengerEnabled: facebookEnabled}
 	_ = store.ConfigureInstagramIntegration(context.Background(), db, option.InstagramAccountID, option.InstagramUsername, option.InstagramAccessToken)
 	if facebookEnabled {
 		_ = store.ConfigureFacebookIntegration(context.Background(), db, option.FacebookPageID)

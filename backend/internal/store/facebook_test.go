@@ -118,10 +118,11 @@ func TestProcessFacebookMessageBindingRoutingIdempotencyAndRemoval(t *testing.T)
 		}
 	}
 	var aliceNotes, bobNotes int
-	if err := db.QueryRow(`SELECT count(*) FROM notes WHERE user_id=1 AND source='facebook' AND title='Facebook Messenger' AND content_markdown='Alice note'`).Scan(&aliceNotes); err != nil {
+	wantTitle := "Facebook Messenger " + now.In(time.FixedZone("WIB", 7*60*60)).Format("01/02/2006 15:04")
+	if err := db.QueryRow(`SELECT count(*) FROM notes WHERE user_id=1 AND source='facebook' AND title=? AND content_markdown='Alice note'`, wantTitle).Scan(&aliceNotes); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.QueryRow(`SELECT count(*) FROM notes WHERE user_id=2 AND source='facebook' AND title='Facebook Messenger' AND content_markdown='Bob note'`).Scan(&bobNotes); err != nil {
+	if err := db.QueryRow(`SELECT count(*) FROM notes WHERE user_id=2 AND source='facebook' AND title=? AND content_markdown='Bob note'`, wantTitle).Scan(&bobNotes); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.QueryRow(`SELECT count(*) FROM notes`).Scan(&notes); err != nil || notes != 2 || aliceNotes != 1 || bobNotes != 1 {
@@ -202,6 +203,26 @@ func TestProcessFacebookMessageRollsBackReceiptOnFailure(t *testing.T) {
 	}
 	if outcome, err := ProcessFacebookMessage(context.Background(), db, "page-1", "psid", "retryable", "code", false, false, now.Format(time.RFC3339Nano)); err != nil || outcome.Kind != FacebookMessageActivated {
 		t.Fatalf("retry = %#v, %v", outcome, err)
+	}
+}
+
+func TestFacebookVerificationReplyClaimAndResult(t *testing.T) {
+	db := newFacebookStoreTest(t)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	identityID := pendingFacebookIdentity(t, db, 1, "reply-code", now.Add(time.Minute))
+	outcome, err := ProcessFacebookMessage(context.Background(), db, "page-1", "reply-psid", "reply-mid", "reply-code", false, false, now.Format(time.RFC3339Nano))
+	if err != nil || outcome.Kind != FacebookMessageActivated || !outcome.OwnsReply {
+		t.Fatalf("activation = %#v, %v", outcome, err)
+	}
+	if replay, err := ProcessFacebookMessage(context.Background(), db, "page-1", "reply-psid", "reply-mid", "reply-code", false, false, now.Format(time.RFC3339Nano)); err != nil || replay.Kind != FacebookMessageDuplicate || replay.OwnsReply {
+		t.Fatalf("replay = %#v, %v", replay, err)
+	}
+	if err := RecordFacebookVerificationReply(context.Background(), db, "reply-mid", now.Add(time.Second).Format(time.RFC3339Nano), false); err != nil {
+		t.Fatal(err)
+	}
+	var result string
+	if err := db.QueryRow(`SELECT verification_result FROM social_identities WHERE id=?`, identityID).Scan(&result); err != nil || result != "system_failure" {
+		t.Fatalf("verification result=%q err=%v", result, err)
 	}
 }
 
