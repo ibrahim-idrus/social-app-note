@@ -125,22 +125,36 @@ func (api *API) facebookWebhook(w http.ResponseWriter, r *http.Request) {
 }
 
 func supportedFacebookAttachments(items []json.RawMessage) []store.FacebookAttachment {
+	if len(items) > 10 {
+		items = items[:10]
+	}
 	attachments := make([]store.FacebookAttachment, 0, len(items))
 	for _, raw := range items {
 		var attachment struct {
 			Type    string `json:"type"`
 			Payload struct {
-				URL string `json:"url"`
+				URL         string `json:"url"`
+				ReelVideoID string `json:"reel_video_id"`
 			} `json:"payload"`
 		}
-		if json.Unmarshal(raw, &attachment) != nil || attachment.Type != "fallback" {
+		if json.Unmarshal(raw, &attachment) != nil || len(attachment.Payload.URL) > 2048 {
 			continue
 		}
 		u, err := url.Parse(attachment.Payload.URL)
-		if err != nil || u.Scheme != "https" || u.Host == "" {
+		host := strings.ToLower(u.Hostname())
+		if err != nil || u.Scheme != "https" || u.User != nil || u.Fragment != "" || (host != "facebook.com" && host != "www.facebook.com" && host != "m.facebook.com" && host != "fb.watch") {
 			continue
 		}
-		attachments = append(attachments, store.FacebookAttachment{Type: "fallback", URL: attachment.Payload.URL})
+		typ := ""
+		if attachment.Type == "fallback" {
+			typ = "fallback"
+		}
+		if attachment.Payload.ReelVideoID != "" {
+			typ = "reel"
+		}
+		if typ != "" {
+			attachments = append(attachments, store.FacebookAttachment{Type: typ, URL: attachment.Payload.URL})
+		}
 	}
 	return attachments
 }

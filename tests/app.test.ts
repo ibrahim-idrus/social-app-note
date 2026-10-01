@@ -203,6 +203,8 @@ test('Facebook fallback attachments render only as safe accessible external link
 	assert.match(apiSource, /facebook_attachments: FacebookAttachment\[\]/);
 	assert.match(detailSource, /FacebookAttachments attachments=\{note\.facebook_attachments\}/);
 	assert.match(mediaSource, /Open shared Facebook post/);
+	assert.match(mediaSource, /Open shared Facebook Reel/);
+	assert.match(mediaSource, /focus-visible/);
 	assert.match(mediaSource, /target="_blank"/);
 	assert.match(mediaSource, /rel="noopener noreferrer"/);
 	assert.doesNotMatch(mediaSource, /iframe|img|fetch\(|carousel|proxy/i);

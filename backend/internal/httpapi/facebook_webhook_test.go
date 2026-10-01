@@ -285,6 +285,19 @@ func TestFacebookWebhookDuplicateAndPrivacySafeLogs(t *testing.T) {
 	}
 }
 
+func TestFacebookReelAttachmentObservedContractAndURLSafety(t *testing.T) {
+	items := []json.RawMessage{
+		json.RawMessage(`{"type":"unknown-provider-type","payload":{"reel_video_id":"redacted","title":"redacted","url":"https://www.facebook.com/reel/redacted"}}`),
+		json.RawMessage(`{"type":"fallback","payload":{"url":"https://evil.example/post"}}`),
+		json.RawMessage(`{"type":"fallback","payload":{"url":"https://user@www.facebook.com/post"}}`),
+		json.RawMessage(`{"type":"fallback","payload":{"url":"https://www.facebook.com/post#fragment"}}`),
+		json.RawMessage(`{"type":"fallback","payload":{"url":"//www.facebook.com/post"}}`),
+	}
+	want := []store.FacebookAttachment{{Type: "reel", URL: "https://www.facebook.com/reel/redacted"}}
+	if got := supportedFacebookAttachments(items); !reflect.DeepEqual(got, want) {
+		t.Fatalf("attachments=%#v want=%#v", got, want)
+	}
+}
 func TestSupportedFacebookAttachmentsLocksObservedFallbackContract(t *testing.T) {
 	items := []json.RawMessage{
 		json.RawMessage(`{"type":"fallback","payload":{"url":"https://www.facebook.com/share/p/first"}}`),
