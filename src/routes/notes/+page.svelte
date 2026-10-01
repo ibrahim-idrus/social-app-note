@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page as route } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { api, type FacebookMessage, type Note } from '$lib/api';
+	import { api, type Note } from '$lib/api';
 	import { formatDate } from '$lib/app-utils';
 	import SearchHighlightedText from '$lib/components/SearchHighlightedText.svelte';
 	import { Button } from '$lib/components/ui/button';
@@ -11,10 +11,10 @@
 	import { onMount } from 'svelte';
 
 	let query = $state(''); let searchIn = $state('all'); let source = $state(''); let sort = $state('updated_at'); let order = $state('desc'); let page = $state(1);
-	let notes = $state<Note[]>([]); let facebookMessages = $state<FacebookMessage[]>([]); let total = $state(0); let loading = $state(true); let error = $state(''); let requestID = 0;
+	let notes = $state<Note[]>([]); let total = $state(0); let loading = $state(true); let error = $state(''); let requestID = 0;
 	const pageSize = 5; let pageCount = $derived(Math.max(1, Math.ceil(total / pageSize)));
 	function readURL() { const p = route.url.searchParams; query=p.get('q')??''; searchIn=p.get('search_in')??'all'; source=p.get('source')??''; sort=p.get('sort')??(query?'relevance':'updated_at'); order=p.get('order')??'desc'; page=Number(p.get('page'))||1; }
-	async function load() { const request = ++requestID; loading=true; error=''; try { const [result,messages]=await Promise.all([api.listNotes({ query, searchIn, source, sort, order, page, pageSize }),api.facebookMessages()]); if(request!==requestID)return; notes=result.notes; total=result.total; facebookMessages=messages; } catch (cause) { if(request!==requestID)return; error=cause instanceof Error?cause.message:'Notes could not load.'; } finally { if(request===requestID)loading=false; } }
+	async function load() { const request = ++requestID; loading=true; error=''; try { const result=await api.listNotes({ query, searchIn, source, sort, order, page, pageSize }); if(request!==requestID)return; notes=result.notes; total=result.total; } catch (cause) { if(request!==requestID)return; error=cause instanceof Error?cause.message:'Notes could not load.'; } finally { if(request===requestID)loading=false; } }
 	async function commit(reset=true) { if(reset) page=1; if(!query && sort==='relevance') sort='updated_at'; const p=new URLSearchParams(); if(query){p.set('q',query.trim());p.set('search_in',searchIn)} if(source)p.set('source',source); if(sort!==(query?'relevance':'updated_at'))p.set('sort',sort); if(order!=='desc')p.set('order',order); if(page>1)p.set('page',String(page)); await goto(`${resolve('/notes')}${p.size?'?'+p:''}`, { replaceState:false, noScroll:true, keepFocus:true }); await load(); }
 	function clear(){ query=''; searchIn='all'; source=''; sort='updated_at'; order='desc'; commit(); }
 	onMount(() => { readURL(); load(); const back=()=>{readURL();load()}; addEventListener('popstate',back); return()=>removeEventListener('popstate',back); });
@@ -36,11 +36,5 @@
 		{:else if notes.length===0}<div class="state-box"><div><FileX2 size={28}/><h2>{query ? `No results for “${query}”` : 'No notes found'}</h2><p>{query||source?'Try a different search or source filter.':'Create your first note to start this workspace.'}</p>{#if query||source}<Button variant="outline" onclick={clear}>Clear search</Button>{:else}<Button href={resolve('/notes/new')}>Create a note</Button>{/if}</div></div>
 		{:else}{#each notes as note}<article class="note-row"><div><h3><a href={resolve('/notes/[id]',{id:String(note.id)})}><SearchHighlightedText text={note.title} ranges={note.title_matches}/></a></h3>{#if note.sections?.length}<div class="search-sections">{#each note.sections as section}<a href={`${resolve('/notes/[id]',{id:String(note.id)})}#${section.anchor}`}><strong>{section.heading_path?.length?section.heading_path.join(' › '):section.heading}</strong><p><SearchHighlightedText text={section.excerpt} ranges={section.matches}/></p></a>{/each}</div>{:else}<p>{note.content_markdown.replace(/[#*_>`-]/g,'')}</p>{/if}</div><div class="note-meta"><span class="source">{#if note.source==='instagram' || note.source==='facebook'}<MessageCircle size={12}/>{/if}{note.source==='facebook' ? 'Facebook Messenger' : note.source}</span><br/>Updated {formatDate(note.updated_at)}</div></article>{/each}
 		<div class="pagination"><span>{total} note{total===1?'':'s'} · Page {page} of {pageCount}</span><div><Button variant="outline" size="icon" aria-label="Previous page" disabled={page===1} onclick={()=>{page--;commit(false)}}><ChevronLeft/></Button><Button variant="outline" size="icon" aria-label="Next page" disabled={page>=pageCount} onclick={()=>{page++;commit(false)}}><ChevronRight/></Button></div></div>{/if}
-	</section>
-	<section class="panel" aria-labelledby="facebook-message-history">
-		<div class="panel-head"><div><h2 id="facebook-message-history">Facebook messages</h2><p class="field-help">Received messages from your connected Facebook account, including ignored messages.</p></div></div>
-		{#if facebookMessages.length}
-			<div class="table-scroll"><table><thead><tr><th>Received</th><th>Message</th><th>Originating account</th><th>Destination Page</th><th>Status</th></tr></thead><tbody>{#each facebookMessages as message}<tr><td>{formatDate(message.received_at)}</td><td>{#if message.note_id}<a href={resolve('/notes/[id]',{id:String(message.note_id)})}>{message.text}</a>{:else}{message.text}{/if}</td><td><code>{message.sender_id}</code></td><td><code>{message.page_id}</code></td><td><span class="source">{message.status.replaceAll('_',' ')}</span></td></tr>{/each}</tbody></table></div>
-		{:else}<div class="panel-body"><p class="subtle">No Facebook messages received for this connected account.</p></div>{/if}
 	</section>
 </div>
