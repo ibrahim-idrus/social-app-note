@@ -6,10 +6,12 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"log"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -82,19 +84,82 @@ func TestFacebookWebhookProcessesSignedMessengerMessage(t *testing.T) {
 	}
 }
 
-func TestFacebookWebhookSavesTextAndIgnoresAttachedMedia(t *testing.T) {
+func TestFacebookWebhookStoresOrderedFallbackAttachmentsWithText(t *testing.T) {
 	h, db := facebookWebhookHandler(t)
-	body := facebookPayload("page-private-123", "sender-private-456", "text-with-media", "keep only this text", false, true)
+	body := `{"object":"page","entry":[{"id":"page-private-123","messaging":[{"sender":{"id":"sender-private-456"},"recipient":{"id":"page-private-123"},"message":{"mid":"text-with-media","text":"keep this text","attachments":[{"type":"fallback","payload":{"url":"https://www.facebook.com/share/p/first"}},{"type":"image","payload":{"url":"https://example.invalid/ignored"}},{"type":"fallback","payload":{"url":"https://www.facebook.com/share/p/second"}}]}}]}]}`
 	w := facebookWebhookRequest(h, body, "app-secret")
 	if w.Code != http.StatusOK {
 		t.Fatalf("POST status=%d body=%s", w.Code, w.Body.String())
 	}
-	var content string
-	if err := db.QueryRow(`SELECT content_markdown FROM notes WHERE external_message_id='text-with-media'`).Scan(&content); err != nil {
+	var content, attachments string
+	if err := db.QueryRow(`SELECT content_markdown, facebook_attachments_json FROM notes WHERE external_message_id='text-with-media'`).Scan(&content, &attachments); err != nil {
 		t.Fatal(err)
 	}
-	if content != "keep only this text" {
-		t.Fatalf("note content=%q", content)
+	if content != "keep this text" || attachments != `[{"type":"fallback","url":"https://www.facebook.com/share/p/first"},{"type":"fallback","url":"https://www.facebook.com/share/p/second"}]` {
+		t.Fatalf("note content=%q attachments=%s", content, attachments)
+	}
+}
+
+func TestFacebookWebhookCreatesAttachmentOnlyNoteAndReturnsItFromAPI(t *testing.T) {
+	h, db := facebookWebhookHandler(t)
+	c := newTestClientWithHandler(t, h)
+	c.register(t, "Owner", "facebook-attachment-owner@example.com")
+	if _, err := db.Exec(`UPDATE social_identities SET user_id=? WHERE platform='facebook' AND platform_user_id='sender-private-456'`, 2); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"object":"page","entry":[{"id":"page-private-123","messaging":[{"sender":{"id":"sender-private-456"},"recipient":{"id":"page-private-123"},"message":{"mid":"attachment-only","attachments":[{"type":"fallback","payload":{"url":"https://www.facebook.com/share/p/only"}}]}}]}]}`
+	for range 2 {
+		if w := facebookWebhookRequest(h, body, "app-secret"); w.Code != http.StatusOK {
+			t.Fatalf("POST status=%d body=%s", w.Code, w.Body.String())
+		}
+	}
+	var noteID int
+	var count int
+	if err := db.QueryRow(`SELECT count(*), id FROM notes WHERE external_message_id='attachment-only'`).Scan(&count, &noteID); err != nil || count != 1 {
+		t.Fatalf("note count=%d id=%d err=%v", count, noteID, err)
+	}
+	res := c.request(t, http.MethodGet, "/api/notes/"+strconv.Itoa(noteID), nil, false)
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"facebook_attachments":[{"type":"fallback","url":"https://www.facebook.com/share/p/only"}]`) || !strings.Contains(res.Body.String(), `"instagram_attachments":[]`) {
+		t.Fatalf("detail=%d %s", res.Code, res.Body.String())
+	}
+}
+
+func TestFacebookWebhookIgnoresInvalidAttachmentsAndDoesNotStoreMediaForUntrustedMessages(t *testing.T) {
+	h, db := facebookWebhookHandler(t)
+	for _, body := range []string{
+		`{"object":"page","entry":[{"id":"page-private-123","messaging":[{"sender":{"id":"sender-private-456"},"recipient":{"id":"page-private-123"},"message":{"mid":"invalid-only","attachments":[{"type":"fallback","payload":{"url":"http://www.facebook.com/not-https"}},{"type":"fallback","payload":{}},"malformed"]}}]}]}`,
+		`{"object":"page","entry":[{"id":"page-private-123","messaging":[{"sender":{"id":"unknown"},"recipient":{"id":"page-private-123"},"message":{"mid":"unknown-media","text":"must not save","attachments":[{"type":"fallback","payload":{"url":"https://www.facebook.com/share/p/unknown"}}]}}]}]}`,
+		`{"object":"page","entry":[{"id":"wrong-page","messaging":[{"sender":{"id":"sender-private-456"},"recipient":{"id":"wrong-page"},"message":{"mid":"wrong-page-media","attachments":[{"type":"fallback","payload":{"url":"https://www.facebook.com/share/p/wrong"}}]}}]}]}`,
+	} {
+		if w := facebookWebhookRequest(h, body, "app-secret"); w.Code != http.StatusOK {
+			t.Fatalf("POST status=%d body=%s", w.Code, w.Body.String())
+		}
+	}
+	var notes, storedMedia int
+	if err := db.QueryRow(`SELECT count(*) FROM notes`).Scan(&notes); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT count(*) FROM notes WHERE facebook_attachments_json IS NOT NULL`).Scan(&storedMedia); err != nil {
+		t.Fatal(err)
+	}
+	if notes != 0 || storedMedia != 0 {
+		t.Fatalf("notes=%d stored media=%d", notes, storedMedia)
+	}
+}
+
+func TestFacebookWebhookKeepsTextWhenAllAttachmentsAreInvalid(t *testing.T) {
+	h, db := facebookWebhookHandler(t)
+	body := `{"object":"page","entry":[{"id":"page-private-123","messaging":[{"sender":{"id":"sender-private-456"},"recipient":{"id":"page-private-123"},"message":{"mid":"text-invalid-media","text":"keep the text","attachments":[{"type":"image","payload":{"url":"https://example.invalid/image"}},{"type":"fallback","payload":{"url":"http://www.facebook.com/not-https"}}]}}]}]}`
+	if w := facebookWebhookRequest(h, body, "app-secret"); w.Code != http.StatusOK {
+		t.Fatalf("POST status=%d body=%s", w.Code, w.Body.String())
+	}
+	var content string
+	var attachments sql.NullString
+	if err := db.QueryRow(`SELECT content_markdown, facebook_attachments_json FROM notes WHERE external_message_id='text-invalid-media'`).Scan(&content, &attachments); err != nil {
+		t.Fatal(err)
+	}
+	if content != "keep the text" || attachments.Valid {
+		t.Fatalf("content=%q attachments=%v", content, attachments)
 	}
 }
 
@@ -208,7 +273,7 @@ func TestFacebookWebhookDuplicateAndPrivacySafeLogs(t *testing.T) {
 		t.Fatalf("notes=%d err=%v", count, err)
 	}
 	text := logs.String()
-	for _, secret := range []string{"page-private-123", "sender-private-456", "message-private-789", "message body must stay private", "app-secret", "sha256="} {
+	for _, secret := range []string{"page-private-123", "sender-private-456", "message-private-789", "message body must stay private", "https://example.invalid/private", "app-secret", "sha256="} {
 		if strings.Contains(text, secret) {
 			t.Fatalf("logs exposed %q: %s", secret, text)
 		}
@@ -217,6 +282,25 @@ func TestFacebookWebhookDuplicateAndPrivacySafeLogs(t *testing.T) {
 		if !strings.Contains(text, required) {
 			t.Fatalf("logs missing %q: %s", required, text)
 		}
+	}
+}
+
+func TestSupportedFacebookAttachmentsLocksObservedFallbackContract(t *testing.T) {
+	items := []json.RawMessage{
+		json.RawMessage(`{"type":"fallback","payload":{"url":"https://www.facebook.com/share/p/first"}}`),
+		json.RawMessage(`{"type":"image","payload":{"url":"https://example.invalid/image"}}`),
+		json.RawMessage(`{"type":"fallback","payload":{"url":"http://www.facebook.com/not-https"}}`),
+		json.RawMessage(`{"type":"fallback","payload":{"url":"https:///missing-host"}}`),
+		json.RawMessage(`{"type":"fallback","payload":{"url":"https://www.facebook.com/share/p/second"}}`),
+		json.RawMessage(`"malformed"`),
+	}
+	got := supportedFacebookAttachments(items)
+	want := []store.FacebookAttachment{
+		{Type: "fallback", URL: "https://www.facebook.com/share/p/first"},
+		{Type: "fallback", URL: "https://www.facebook.com/share/p/second"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("attachments=%#v want=%#v", got, want)
 	}
 }
 

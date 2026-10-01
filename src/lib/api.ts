@@ -2,6 +2,7 @@ export type User = { id: number; name: string; email: string; created_at: string
 export type MatchRange = { start: number; end: number };
 export type NoteSearchSection = { heading: string; heading_path: string[]; anchor: string; excerpt: string; matches: MatchRange[] };
 export type InstagramAttachment = { type: 'ig_post' | 'ig_reel'; url: string; media_id: string; alt: string };
+export type FacebookAttachment = { type: 'fallback'; url: string };
 export type Note = {
 	id: number;
 	social_identity_id: number | null;
@@ -14,6 +15,7 @@ export type Note = {
 	title_matches?: MatchRange[];
 	sections?: NoteSearchSection[];
 	instagram_attachments: InstagramAttachment[];
+	facebook_attachments: FacebookAttachment[];
 };
 export type NotesPage = { notes: Note[]; total: number; page: number; page_size: number };
 export type FacebookMessage = { external_message_id: string; sender_id: string; page_id: string; text: string; status: string; note_id: number | null; received_at: string };

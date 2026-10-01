@@ -193,3 +193,17 @@ test('Instagram Reel notes use the official embed with a link fallback', async (
 	assert.match(source, /\/embed\//);
 	assert.match(source, /Open on Instagram/);
 });
+
+test('Facebook fallback attachments render only as safe accessible external links', async () => {
+	const { readFile } = await import('node:fs/promises');
+	const apiSource = await readFile('src/lib/api.ts', 'utf8');
+	const detailSource = await readFile('src/routes/notes/[id]/+page.svelte', 'utf8');
+	const mediaSource = await readFile('src/lib/components/FacebookAttachments.svelte', 'utf8');
+	assert.match(apiSource, /FacebookAttachment/);
+	assert.match(apiSource, /facebook_attachments: FacebookAttachment\[\]/);
+	assert.match(detailSource, /FacebookAttachments attachments=\{note\.facebook_attachments\}/);
+	assert.match(mediaSource, /Open shared Facebook post/);
+	assert.match(mediaSource, /target="_blank"/);
+	assert.match(mediaSource, /rel="noopener noreferrer"/);
+	assert.doesNotMatch(mediaSource, /iframe|img|fetch\(|carousel|proxy/i);
+});

@@ -99,7 +99,7 @@ func TestFacebookIdentityAuthenticationCSRFCreateListRegenerateAndRemove(t *test
 		t.Fatal(err)
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if outcome, err := store.ProcessFacebookMessage(context.Background(), c.db, "page-123", "psid-1", "bind-1", registration.VerificationCode, false, false, now); err != nil || outcome.Kind != store.FacebookMessageActivated {
+	if outcome, err := store.ProcessFacebookMessage(context.Background(), c.db, "page-123", "psid-1", "bind-1", registration.VerificationCode, false, nil, now); err != nil || outcome.Kind != store.FacebookMessageActivated {
 		t.Fatalf("binding=%#v err=%v", outcome, err)
 	}
 	listed = c.request(t, http.MethodGet, "/api/social-identities", nil, false)

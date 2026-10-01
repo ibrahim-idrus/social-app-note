@@ -87,7 +87,8 @@ func (api *API) facebookWebhook(w http.ResponseWriter, r *http.Request) {
 			sender, recipient, messageID = webhookID(event.Sender.ID), webhookID(event.Recipient.ID), webhookID(event.Message.MID)
 			page = webhookID(entry.ID)
 			log.Printf("facebook webhook event receipt sender=%s recipient=%s page=%s message=%s", sender, recipient, page, messageID)
-			reason := api.facebookWebhookIgnoreReason(entry.ID, event)
+			attachments := supportedFacebookAttachments(event.Message.Attachments)
+			reason := api.facebookWebhookIgnoreReason(entry.ID, event, attachments)
 			if reason != "" {
 				if err := store.RecordFacebookMessage(r.Context(), api.db, entry.ID, event.Sender.ID, event.Message.MID, event.Message.Text, "ignored", time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 					requestResult = "processing_failed"
@@ -98,7 +99,7 @@ func (api *API) facebookWebhook(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			processingRan = true
-			outcome, err := store.ProcessFacebookMessage(r.Context(), api.db, entry.ID, event.Sender.ID, event.Message.MID, event.Message.Text, event.Message.IsEcho, len(event.Message.Attachments) > 0, time.Now().UTC().Format(time.RFC3339Nano))
+			outcome, err := store.ProcessFacebookMessage(r.Context(), api.db, entry.ID, event.Sender.ID, event.Message.MID, event.Message.Text, event.Message.IsEcho, attachments, time.Now().UTC().Format(time.RFC3339Nano))
 			if err != nil {
 				log.Printf("facebook webhook event result sender=%s recipient=%s page=%s message=%s processing_ran=true processing_result=error", sender, recipient, page, messageID)
 				requestResult = "processing_failed"
@@ -121,6 +122,27 @@ func (api *API) facebookWebhook(w http.ResponseWriter, r *http.Request) {
 		requestResult = "ignored"
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func supportedFacebookAttachments(items []json.RawMessage) []store.FacebookAttachment {
+	attachments := make([]store.FacebookAttachment, 0, len(items))
+	for _, raw := range items {
+		var attachment struct {
+			Type    string `json:"type"`
+			Payload struct {
+				URL string `json:"url"`
+			} `json:"payload"`
+		}
+		if json.Unmarshal(raw, &attachment) != nil || attachment.Type != "fallback" {
+			continue
+		}
+		u, err := url.Parse(attachment.Payload.URL)
+		if err != nil || u.Scheme != "https" || u.Host == "" {
+			continue
+		}
+		attachments = append(attachments, store.FacebookAttachment{Type: "fallback", URL: attachment.Payload.URL})
+	}
+	return attachments
 }
 
 func (api *API) sendFacebookText(ctx context.Context, recipient, text string) error {
@@ -158,7 +180,7 @@ func validFacebookSignature(body []byte, signature, secret string) bool {
 	return err == nil && len(got) == sha256.Size && hmac.Equal(got, mac.Sum(nil))
 }
 
-func (api *API) facebookWebhookIgnoreReason(pageID string, event facebookWebhookEvent) string {
+func (api *API) facebookWebhookIgnoreReason(pageID string, event facebookWebhookEvent, attachments []store.FacebookAttachment) string {
 	switch {
 	case pageID == "" || pageID != api.facebookPageID:
 		return "wrong_page"
@@ -170,7 +192,7 @@ func (api *API) facebookWebhookIgnoreReason(pageID string, event facebookWebhook
 		return "wrong_recipient"
 	case event.Message.MID == "":
 		return "missing_message_id"
-	case strings.TrimSpace(event.Message.Text) == "":
+	case strings.TrimSpace(event.Message.Text) == "" && len(attachments) == 0:
 		return "missing_text"
 	default:
 		return ""

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -129,9 +130,9 @@ func RecordFacebookMessage(ctx context.Context, db *sql.DB, pageID, psid, extern
 	return err
 }
 
-func ProcessFacebookMessage(ctx context.Context, db *sql.DB, pageID, psid, externalMessageID, text string, echo, hasAttachments bool, now string) (FacebookMessageOutcome, error) {
-	_ = hasAttachments
-	if strings.TrimSpace(pageID) == "" || strings.TrimSpace(psid) == "" || strings.TrimSpace(externalMessageID) == "" || now == "" || len(pageID) > 128 || len(psid) > 128 || len(externalMessageID) > 256 || echo || strings.TrimSpace(text) == "" {
+func ProcessFacebookMessage(ctx context.Context, db *sql.DB, pageID, psid, externalMessageID, text string, echo bool, attachments []FacebookAttachment, now string) (FacebookMessageOutcome, error) {
+	text = strings.TrimSpace(text)
+	if strings.TrimSpace(pageID) == "" || strings.TrimSpace(psid) == "" || strings.TrimSpace(externalMessageID) == "" || now == "" || len(pageID) > 128 || len(psid) > 128 || len(externalMessageID) > 256 || echo || (text == "" && len(attachments) == 0) {
 		return FacebookMessageOutcome{Kind: FacebookMessageIgnored}, nil
 	}
 	tx, err := db.BeginTx(ctx, nil)
@@ -174,7 +175,19 @@ func ProcessFacebookMessage(ctx context.Context, db *sql.DB, pageID, psid, exter
 			return FacebookMessageOutcome{}, err
 		}
 		title := "Facebook Messenger " + instant.In(jakarta).Format("01/02/2006 15:04")
-		result, err := tx.ExecContext(ctx, `INSERT INTO notes (user_id, social_identity_id, title, content_markdown, source, external_message_id) VALUES (?, ?, ?, ?, 'facebook', ?)`, userID, identityID, title, text, externalMessageID)
+		content := text
+		if content == "" {
+			content = "Shared Facebook post"
+		}
+		var raw any
+		if len(attachments) > 0 {
+			encoded, err := json.Marshal(attachments)
+			if err != nil {
+				return FacebookMessageOutcome{}, err
+			}
+			raw = string(encoded)
+		}
+		result, err := tx.ExecContext(ctx, `INSERT INTO notes (user_id, social_identity_id, title, content_markdown, source, external_message_id, facebook_attachments_json) VALUES (?, ?, ?, ?, 'facebook', ?, ?)`, userID, identityID, title, content, externalMessageID, raw)
 		if err != nil {
 			return FacebookMessageOutcome{}, err
 		}

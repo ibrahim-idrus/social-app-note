@@ -79,17 +79,71 @@ func TestFacebookSchemaAndConfiguredPage(t *testing.T) {
 	}
 }
 
+func TestProcessFacebookMessageStoresAttachmentsAtomicallyAndDeduplicates(t *testing.T) {
+	db := newFacebookStoreTest(t)
+	if _, err := db.Exec(`INSERT INTO social_identities (user_id, platform, platform_user_id, username, normalized_username, status) VALUES (1, 'facebook', 'sender-1', '', '', 'active')`); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	attachments := []FacebookAttachment{{Type: "fallback", URL: "https://www.facebook.com/share/p/first"}, {Type: "fallback", URL: "https://www.facebook.com/share/p/second"}}
+	for range 2 {
+		outcome, err := ProcessFacebookMessage(context.Background(), db, "page-1", "sender-1", "shared-post", "", false, attachments, now)
+		if err != nil || (outcome.Kind != FacebookMessageNoteCreated && outcome.Kind != FacebookMessageDuplicate) {
+			t.Fatalf("outcome=%#v err=%v", outcome, err)
+		}
+	}
+	var notes, receipts int
+	var content, raw string
+	if err := db.QueryRow(`SELECT count(*), content_markdown, facebook_attachments_json FROM notes WHERE external_message_id='shared-post'`).Scan(&notes, &content, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT count(*) FROM facebook_message_receipts WHERE external_message_id='shared-post' AND status='note_created'`).Scan(&receipts); err != nil {
+		t.Fatal(err)
+	}
+	if notes != 1 || receipts != 1 || content != "Shared Facebook post" || raw != `[{"type":"fallback","url":"https://www.facebook.com/share/p/first"},{"type":"fallback","url":"https://www.facebook.com/share/p/second"}]` {
+		t.Fatalf("notes=%d receipts=%d content=%q attachments=%s", notes, receipts, content, raw)
+	}
+
+	if _, err := db.Exec(`CREATE TRIGGER fail_facebook_note BEFORE INSERT ON notes WHEN NEW.source='facebook' BEGIN SELECT RAISE(ABORT, 'forced failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ProcessFacebookMessage(context.Background(), db, "page-1", "sender-1", "retryable-media", "", false, attachments, now); err == nil {
+		t.Fatal("forced note failure succeeded")
+	}
+	if err := db.QueryRow(`SELECT count(*) FROM facebook_message_receipts WHERE external_message_id='retryable-media'`).Scan(&receipts); err != nil || receipts != 0 {
+		t.Fatalf("receipt survived rollback: count=%d err=%v", receipts, err)
+	}
+}
+
+func TestProcessFacebookMessageDoesNotStoreAttachmentsForVerificationOrUnknownSender(t *testing.T) {
+	db := newFacebookStoreTest(t)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	pendingFacebookIdentity(t, db, 1, "connect-code", now.Add(time.Minute))
+	attachments := []FacebookAttachment{{Type: "fallback", URL: "https://www.facebook.com/share/p/private"}}
+	outcome, err := ProcessFacebookMessage(context.Background(), db, "page-1", "new-sender", "verify-with-media", "connect-code", false, attachments, now.Format(time.RFC3339Nano))
+	if err != nil || outcome.Kind != FacebookMessageActivated {
+		t.Fatalf("verification outcome=%#v err=%v", outcome, err)
+	}
+	if outcome, err = ProcessFacebookMessage(context.Background(), db, "page-1", "unknown", "unknown-media", "", false, attachments, now.Format(time.RFC3339Nano)); err != nil || outcome.Kind != FacebookMessageIgnored {
+		t.Fatalf("unknown outcome=%#v err=%v", outcome, err)
+	}
+	var notes int
+	if err := db.QueryRow(`SELECT count(*) FROM notes`).Scan(&notes); err != nil || notes != 0 {
+		t.Fatalf("untrusted messages created notes=%d err=%v", notes, err)
+	}
+}
+
 func TestProcessFacebookMessageBindingRoutingIdempotencyAndRemoval(t *testing.T) {
 	db := newFacebookStoreTest(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	aliceID := pendingFacebookIdentity(t, db, 1, "alice-code", now.Add(10*time.Minute))
 	bobID := pendingFacebookIdentity(t, db, 2, "bob-code", now.Add(10*time.Minute))
 
-	outcome, err := ProcessFacebookMessage(context.Background(), db, "page-1", "psid-alice", "bind-a", "alice-code", false, false, now.Format(time.RFC3339Nano))
+	outcome, err := ProcessFacebookMessage(context.Background(), db, "page-1", "psid-alice", "bind-a", "alice-code", false, nil, now.Format(time.RFC3339Nano))
 	if err != nil || outcome.Kind != FacebookMessageActivated || outcome.IdentityID != aliceID {
 		t.Fatalf("Alice binding = %#v, %v", outcome, err)
 	}
-	if outcome, err = ProcessFacebookMessage(context.Background(), db, "page-1", "psid-bob", "bind-b", "bob-code", false, false, now.Format(time.RFC3339Nano)); err != nil || outcome.Kind != FacebookMessageActivated || outcome.IdentityID != bobID {
+	if outcome, err = ProcessFacebookMessage(context.Background(), db, "page-1", "psid-bob", "bind-b", "bob-code", false, nil, now.Format(time.RFC3339Nano)); err != nil || outcome.Kind != FacebookMessageActivated || outcome.IdentityID != bobID {
 		t.Fatalf("Bob binding = %#v, %v", outcome, err)
 	}
 	var notes int
@@ -99,21 +153,21 @@ func TestProcessFacebookMessageBindingRoutingIdempotencyAndRemoval(t *testing.T)
 
 	for _, message := range []struct {
 		page, psid, id, text string
-		echo, attachment     bool
+		echo                 bool
 	}{
-		{"page-1", "psid-alice", "note-a", "Alice note", false, false},
-		{"page-1", "psid-alice", "note-a", "duplicate", false, false},
-		{"page-1", "psid-bob", "note-b", "Bob note", false, true},
-		{"wrong-page", "psid-alice", "wrong-page", "ignored", false, false},
-		{"page-1", "psid-alice", "echo", "ignored", true, false},
-		{"page-1", "psid-alice", "empty", "   ", false, false},
-		{"page-1", "psid-alice", "attachment", "", false, true},
-		{"page-1", "unknown", "unknown", "ignored", false, false},
-		{"page-1", "", "missing-psid", "ignored", false, false},
-		{"page-1", "psid-alice", "", "ignored", false, false},
-		{"page-1", "psid-alice", "   ", "ignored", false, false},
+		{"page-1", "psid-alice", "note-a", "Alice note", false},
+		{"page-1", "psid-alice", "note-a", "duplicate", false},
+		{"page-1", "psid-bob", "note-b", "Bob note", false},
+		{"wrong-page", "psid-alice", "wrong-page", "ignored", false},
+		{"page-1", "psid-alice", "echo", "ignored", true},
+		{"page-1", "psid-alice", "empty", "   ", false},
+		{"page-1", "psid-alice", "attachment", "", false},
+		{"page-1", "unknown", "unknown", "ignored", false},
+		{"page-1", "", "missing-psid", "ignored", false},
+		{"page-1", "psid-alice", "", "ignored", false},
+		{"page-1", "psid-alice", "   ", "ignored", false},
 	} {
-		if _, err := ProcessFacebookMessage(context.Background(), db, message.page, message.psid, message.id, message.text, message.echo, message.attachment, now.Format(time.RFC3339Nano)); err != nil {
+		if _, err := ProcessFacebookMessage(context.Background(), db, message.page, message.psid, message.id, message.text, message.echo, nil, now.Format(time.RFC3339Nano)); err != nil {
 			t.Fatalf("process %#v: %v", message, err)
 		}
 	}
@@ -136,7 +190,7 @@ func TestProcessFacebookMessageBindingRoutingIdempotencyAndRemoval(t *testing.T)
 	if err := DeleteSocialIdentity(context.Background(), db, 1, aliceID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ProcessFacebookMessage(context.Background(), db, "page-1", "psid-alice", "after-remove", "ignored", false, false, now.Format(time.RFC3339Nano)); err != nil {
+	if _, err := ProcessFacebookMessage(context.Background(), db, "page-1", "psid-alice", "after-remove", "ignored", false, nil, now.Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)
 	}
 	var preserved int
@@ -154,7 +208,7 @@ func TestProcessFacebookMessageRejectsExpiredConsumedAndWrongCodes(t *testing.T)
 		{"expired-psid", "expired", "expired-code"},
 		{"wrong-psid", "wrong", "wrong-code"},
 	} {
-		if _, err := ProcessFacebookMessage(context.Background(), db, "page-1", message.psid, message.id, message.text, false, false, now.Format(time.RFC3339Nano)); err != nil {
+		if _, err := ProcessFacebookMessage(context.Background(), db, "page-1", message.psid, message.id, message.text, false, nil, now.Format(time.RFC3339Nano)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -167,10 +221,10 @@ func TestProcessFacebookMessageRejectsExpiredConsumedAndWrongCodes(t *testing.T)
 	}
 
 	activeID := pendingFacebookIdentity(t, db, 2, "single-use", now.Add(time.Minute))
-	if _, err := ProcessFacebookMessage(context.Background(), db, "page-1", "owner-psid", "activate", "single-use", false, false, now.Format(time.RFC3339Nano)); err != nil {
+	if _, err := ProcessFacebookMessage(context.Background(), db, "page-1", "owner-psid", "activate", "single-use", false, nil, now.Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ProcessFacebookMessage(context.Background(), db, "page-1", "other-psid", "reuse", "single-use", false, false, now.Format(time.RFC3339Nano)); err != nil {
+	if _, err := ProcessFacebookMessage(context.Background(), db, "page-1", "other-psid", "reuse", "single-use", false, nil, now.Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)
 	}
 	var psid string
@@ -190,7 +244,7 @@ func TestProcessFacebookMessageRollsBackReceiptOnFailure(t *testing.T) {
 	if _, err := db.Exec(`CREATE TRIGGER fail_facebook_activation BEFORE UPDATE OF status ON social_identities WHEN NEW.platform='facebook' BEGIN SELECT RAISE(ABORT, 'forced failure'); END`); err != nil {
 		t.Fatal(err)
 	}
-	_, err := ProcessFacebookMessage(context.Background(), db, "page-1", "psid", "retryable", "code", false, false, now.Format(time.RFC3339Nano))
+	_, err := ProcessFacebookMessage(context.Background(), db, "page-1", "psid", "retryable", "code", false, nil, now.Format(time.RFC3339Nano))
 	if err == nil {
 		t.Fatal("forced processing failure succeeded")
 	}
@@ -201,7 +255,7 @@ func TestProcessFacebookMessageRollsBackReceiptOnFailure(t *testing.T) {
 	if _, err := db.Exec(`DROP TRIGGER fail_facebook_activation`); err != nil {
 		t.Fatal(err)
 	}
-	if outcome, err := ProcessFacebookMessage(context.Background(), db, "page-1", "psid", "retryable", "code", false, false, now.Format(time.RFC3339Nano)); err != nil || outcome.Kind != FacebookMessageActivated {
+	if outcome, err := ProcessFacebookMessage(context.Background(), db, "page-1", "psid", "retryable", "code", false, nil, now.Format(time.RFC3339Nano)); err != nil || outcome.Kind != FacebookMessageActivated {
 		t.Fatalf("retry = %#v, %v", outcome, err)
 	}
 }
@@ -210,11 +264,11 @@ func TestFacebookVerificationReplyClaimAndResult(t *testing.T) {
 	db := newFacebookStoreTest(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	identityID := pendingFacebookIdentity(t, db, 1, "reply-code", now.Add(time.Minute))
-	outcome, err := ProcessFacebookMessage(context.Background(), db, "page-1", "reply-psid", "reply-mid", "reply-code", false, false, now.Format(time.RFC3339Nano))
+	outcome, err := ProcessFacebookMessage(context.Background(), db, "page-1", "reply-psid", "reply-mid", "reply-code", false, nil, now.Format(time.RFC3339Nano))
 	if err != nil || outcome.Kind != FacebookMessageActivated || !outcome.OwnsReply {
 		t.Fatalf("activation = %#v, %v", outcome, err)
 	}
-	if replay, err := ProcessFacebookMessage(context.Background(), db, "page-1", "reply-psid", "reply-mid", "reply-code", false, false, now.Format(time.RFC3339Nano)); err != nil || replay.Kind != FacebookMessageDuplicate || replay.OwnsReply {
+	if replay, err := ProcessFacebookMessage(context.Background(), db, "page-1", "reply-psid", "reply-mid", "reply-code", false, nil, now.Format(time.RFC3339Nano)); err != nil || replay.Kind != FacebookMessageDuplicate || replay.OwnsReply {
 		t.Fatalf("replay = %#v, %v", replay, err)
 	}
 	if err := RecordFacebookVerificationReply(context.Background(), db, "reply-mid", now.Add(time.Second).Format(time.RFC3339Nano), false); err != nil {
@@ -230,10 +284,10 @@ func TestFacebookPageChangeInvalidatesPageScopedBindingsAndPreservesNotes(t *tes
 	db := newFacebookStoreTest(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	identityID := pendingFacebookIdentity(t, db, 1, "bind-code", now.Add(time.Minute))
-	if _, err := ProcessFacebookMessage(context.Background(), db, "page-1", "shared-psid", "bind", "bind-code", false, false, now.Format(time.RFC3339Nano)); err != nil {
+	if _, err := ProcessFacebookMessage(context.Background(), db, "page-1", "shared-psid", "bind", "bind-code", false, nil, now.Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ProcessFacebookMessage(context.Background(), db, "page-1", "shared-psid", "note", "preserved", false, false, now.Format(time.RFC3339Nano)); err != nil {
+	if _, err := ProcessFacebookMessage(context.Background(), db, "page-1", "shared-psid", "note", "preserved", false, nil, now.Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)
 	}
 	if err := ConfigureFacebookIntegration(context.Background(), db, "page-2"); err != nil {
@@ -249,7 +303,7 @@ func TestFacebookPageChangeInvalidatesPageScopedBindingsAndPreservesNotes(t *tes
 	if identities != 0 || preserved != 1 {
 		t.Fatalf("page change left identities=%d preserved notes=%d", identities, preserved)
 	}
-	outcome, err := ProcessFacebookMessage(context.Background(), db, "page-2", "shared-psid", "after-change", "must not route", false, false, now.Format(time.RFC3339Nano))
+	outcome, err := ProcessFacebookMessage(context.Background(), db, "page-2", "shared-psid", "after-change", "must not route", false, nil, now.Format(time.RFC3339Nano))
 	if err != nil || outcome.Kind != FacebookMessageIgnored {
 		t.Fatalf("old page binding routed after change: %#v %v", outcome, err)
 	}

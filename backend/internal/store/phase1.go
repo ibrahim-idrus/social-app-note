@@ -35,6 +35,7 @@ type Note struct {
 	TitleMatches         []MatchRange          `json:"title_matches,omitempty"`
 	Sections             []NoteSearchSection   `json:"sections,omitempty"`
 	InstagramAttachments []InstagramAttachment `json:"instagram_attachments"`
+	FacebookAttachments  []FacebookAttachment  `json:"facebook_attachments"`
 }
 
 type InstagramAttachment struct {
@@ -44,14 +45,25 @@ type InstagramAttachment struct {
 	Alt              string `json:"alt"`
 }
 
+type FacebookAttachment struct {
+	Type string `json:"type"`
+	URL  string `json:"url"`
+}
+
 func scanNote(s interface{ Scan(...any) error }, n *Note) error {
-	var raw sql.NullString
-	if err := s.Scan(&n.ID, &n.UserID, &n.SocialIdentityID, &n.Title, &n.ContentMarkdown, &n.Source, &n.ExternalMessageID, &n.CreatedAt, &n.UpdatedAt, &raw); err != nil {
+	var instagramRaw, facebookRaw sql.NullString
+	if err := s.Scan(&n.ID, &n.UserID, &n.SocialIdentityID, &n.Title, &n.ContentMarkdown, &n.Source, &n.ExternalMessageID, &n.CreatedAt, &n.UpdatedAt, &instagramRaw, &facebookRaw); err != nil {
 		return err
 	}
 	n.InstagramAttachments = []InstagramAttachment{}
-	if raw.Valid {
-		return json.Unmarshal([]byte(raw.String), &n.InstagramAttachments)
+	n.FacebookAttachments = []FacebookAttachment{}
+	if instagramRaw.Valid {
+		if err := json.Unmarshal([]byte(instagramRaw.String), &n.InstagramAttachments); err != nil {
+			return err
+		}
+	}
+	if facebookRaw.Valid {
+		return json.Unmarshal([]byte(facebookRaw.String), &n.FacebookAttachments)
 	}
 	return nil
 }
@@ -125,7 +137,7 @@ func CreateNote(ctx context.Context, db *sql.DB, userID int64, title, content st
 func NoteByID(ctx context.Context, db *sql.DB, userID, id int64) (Note, error) {
 	var note Note
 	row := db.QueryRowContext(ctx, `
-		SELECT id, user_id, social_identity_id, title, content_markdown, source, external_message_id, created_at, updated_at, instagram_attachments_json
+		SELECT id, user_id, social_identity_id, title, content_markdown, source, external_message_id, created_at, updated_at, instagram_attachments_json, facebook_attachments_json
 		FROM notes WHERE id = ? AND user_id = ?`, id, userID)
 	err := scanNote(row, &note)
 	return note, err
@@ -191,7 +203,7 @@ func ListNotes(ctx context.Context, db *sql.DB, userID int64, query, searchIn, s
 	}
 	args = append(args, pageSize, (page-1)*pageSize)
 	rows, err := db.QueryContext(ctx, fmt.Sprintf(`
-		SELECT id, user_id, social_identity_id, title, content_markdown, source, external_message_id, created_at, updated_at, instagram_attachments_json
+		SELECT id, user_id, social_identity_id, title, content_markdown, source, external_message_id, created_at, updated_at, instagram_attachments_json, facebook_attachments_json
 		FROM notes WHERE %s ORDER BY %s LIMIT ? OFFSET ?`, where, orderBy), args...)
 	if err != nil {
 		return NoteList{}, err

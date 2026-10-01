@@ -236,6 +236,9 @@ func TestManualNoteCRUDCSRFAndOwnership(t *testing.T) {
 	if note["source"] != "manual" || note["title"] != "First" {
 		t.Fatalf("note = %#v", note)
 	}
+	if attachments, ok := note["facebook_attachments"].([]any); !ok || len(attachments) != 0 {
+		t.Fatalf("old note Facebook attachments = %#v", note["facebook_attachments"])
+	}
 
 	if got := a.request(t, http.MethodPut, "/api/notes/"+itoa(id), map[string]string{"title": "Changed", "content_markdown": "updated"}, false).Code; got != http.StatusForbidden {
 		t.Fatalf("update without CSRF = %d", got)
