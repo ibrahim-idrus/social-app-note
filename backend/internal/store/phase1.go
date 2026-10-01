@@ -46,8 +46,10 @@ type InstagramAttachment struct {
 }
 
 type FacebookAttachment struct {
-	Type string `json:"type"`
-	URL  string `json:"url"`
+	Type         string `json:"type"`
+	URL          string `json:"url"`
+	Title        string `json:"title,omitempty"`
+	LookupStatus string `json:"lookup_status,omitempty"`
 }
 
 func scanNote(s interface{ Scan(...any) error }, n *Note) error {

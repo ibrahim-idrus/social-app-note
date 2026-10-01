@@ -194,7 +194,7 @@ test('Instagram Reel notes use the official embed with a link fallback', async (
 	assert.match(source, /Open on Instagram/);
 });
 
-test('Facebook fallback attachments render only as safe accessible external links', async () => {
+test('Facebook attachments render a native metadata card instead of an unreliable plugin iframe', async () => {
 	const { readFile } = await import('node:fs/promises');
 	const apiSource = await readFile('src/lib/api.ts', 'utf8');
 	const detailSource = await readFile('src/routes/notes/[id]/+page.svelte', 'utf8');
@@ -202,14 +202,12 @@ test('Facebook fallback attachments render only as safe accessible external link
 	assert.match(apiSource, /FacebookAttachment/);
 	assert.match(apiSource, /facebook_attachments: FacebookAttachment\[\]/);
 	assert.match(detailSource, /FacebookAttachments attachments=\{note\.facebook_attachments\}/);
-	assert.match(mediaSource, /Open shared Facebook post/);
-	assert.match(mediaSource, /Open shared Facebook Reel/);
+	assert.match(mediaSource, /Shared Facebook post/);
+	assert.match(mediaSource, /Shared Facebook Reel/);
 	assert.match(mediaSource, /focus-visible/);
 	assert.match(mediaSource, /target="_blank"/);
 	assert.match(mediaSource, /rel="noopener noreferrer"/);
-	assert.match(mediaSource, /facebook\.com\/plugins/);
-	assert.match(mediaSource, /encodeURIComponent\(attachment\.url\)/);
-	assert.match(mediaSource, /<iframe/);
-	assert.match(mediaSource, /loading="lazy"/);
-	assert.doesNotMatch(mediaSource, /<img|fetch\(|carousel|proxy/i);
+	assert.match(mediaSource, /attachment\.title/);
+	assert.match(mediaSource, /Preview unavailable/);
+	assert.doesNotMatch(mediaSource, /facebook\.com\/plugins|<iframe|fetch\(/i);
 });

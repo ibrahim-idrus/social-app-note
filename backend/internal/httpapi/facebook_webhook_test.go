@@ -95,7 +95,7 @@ func TestFacebookWebhookStoresOrderedFallbackAttachmentsWithText(t *testing.T) {
 	if err := db.QueryRow(`SELECT content_markdown, facebook_attachments_json FROM notes WHERE external_message_id='text-with-media'`).Scan(&content, &attachments); err != nil {
 		t.Fatal(err)
 	}
-	if content != "keep this text" || attachments != `[{"type":"fallback","url":"https://www.facebook.com/share/p/first"},{"type":"fallback","url":"https://www.facebook.com/share/p/second"}]` {
+	if content != "keep this text" || attachments != `[{"type":"fallback","url":"https://www.facebook.com/share/p/first","lookup_status":"unavailable"},{"type":"fallback","url":"https://www.facebook.com/share/p/second","lookup_status":"unavailable"}]` {
 		t.Fatalf("note content=%q attachments=%s", content, attachments)
 	}
 }
@@ -119,7 +119,7 @@ func TestFacebookWebhookCreatesAttachmentOnlyNoteAndReturnsItFromAPI(t *testing.
 		t.Fatalf("note count=%d id=%d err=%v", count, noteID, err)
 	}
 	res := c.request(t, http.MethodGet, "/api/notes/"+strconv.Itoa(noteID), nil, false)
-	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"facebook_attachments":[{"type":"fallback","url":"https://www.facebook.com/share/p/only"}]`) || !strings.Contains(res.Body.String(), `"instagram_attachments":[]`) {
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"facebook_attachments":[{"type":"fallback","url":"https://www.facebook.com/share/p/only","lookup_status":"unavailable"}]`) || !strings.Contains(res.Body.String(), `"instagram_attachments":[]`) {
 		t.Fatalf("detail=%d %s", res.Code, res.Body.String())
 	}
 }
@@ -293,14 +293,14 @@ func TestFacebookReelAttachmentObservedContractAndURLSafety(t *testing.T) {
 		json.RawMessage(`{"type":"fallback","payload":{"url":"https://www.facebook.com/post#fragment"}}`),
 		json.RawMessage(`{"type":"fallback","payload":{"url":"//www.facebook.com/post"}}`),
 	}
-	want := []store.FacebookAttachment{{Type: "reel", URL: "https://www.facebook.com/reel/redacted"}}
+	want := []store.FacebookAttachment{{Type: "reel", URL: "https://www.facebook.com/reel/redacted", Title: "redacted", LookupStatus: "captured"}}
 	if got := supportedFacebookAttachments(items); !reflect.DeepEqual(got, want) {
 		t.Fatalf("attachments=%#v want=%#v", got, want)
 	}
 }
 func TestSupportedFacebookAttachmentsLocksObservedFallbackContract(t *testing.T) {
 	items := []json.RawMessage{
-		json.RawMessage(`{"type":"fallback","payload":{"url":"https://www.facebook.com/share/p/first"}}`),
+		json.RawMessage(`{"type":"fallback","payload":{"url":"https://www.facebook.com/share/p/first","title":"A useful shared post"}}`),
 		json.RawMessage(`{"type":"image","payload":{"url":"https://example.invalid/image"}}`),
 		json.RawMessage(`{"type":"fallback","payload":{"url":"http://www.facebook.com/not-https"}}`),
 		json.RawMessage(`{"type":"fallback","payload":{"url":"https:///missing-host"}}`),
@@ -309,8 +309,8 @@ func TestSupportedFacebookAttachmentsLocksObservedFallbackContract(t *testing.T)
 	}
 	got := supportedFacebookAttachments(items)
 	want := []store.FacebookAttachment{
-		{Type: "fallback", URL: "https://www.facebook.com/share/p/first"},
-		{Type: "fallback", URL: "https://www.facebook.com/share/p/second"},
+		{Type: "fallback", URL: "https://www.facebook.com/share/p/first", Title: "A useful shared post", LookupStatus: "captured"},
+		{Type: "fallback", URL: "https://www.facebook.com/share/p/second", LookupStatus: "unavailable"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("attachments=%#v want=%#v", got, want)

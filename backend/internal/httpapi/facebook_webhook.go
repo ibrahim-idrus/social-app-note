@@ -135,6 +135,7 @@ func supportedFacebookAttachments(items []json.RawMessage) []store.FacebookAttac
 			Payload struct {
 				URL         string `json:"url"`
 				ReelVideoID string `json:"reel_video_id"`
+				Title       string `json:"title"`
 			} `json:"payload"`
 		}
 		if json.Unmarshal(raw, &attachment) != nil || len(attachment.Payload.URL) > 2048 {
@@ -153,7 +154,12 @@ func supportedFacebookAttachments(items []json.RawMessage) []store.FacebookAttac
 			typ = "reel"
 		}
 		if typ != "" {
-			attachments = append(attachments, store.FacebookAttachment{Type: typ, URL: attachment.Payload.URL})
+			title := strings.TrimSpace(attachment.Payload.Title)
+			status := "unavailable"
+			if title != "" {
+				status = "captured"
+			}
+			attachments = append(attachments, store.FacebookAttachment{Type: typ, URL: attachment.Payload.URL, Title: title, LookupStatus: status})
 		}
 	}
 	return attachments
