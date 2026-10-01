@@ -92,6 +92,7 @@ func (api *API) processInstagramText(ctx context.Context, recipient, sender, mes
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	outcome, err := store.ProcessInstagramDM(ctx, api.db, recipient, sender, messageID, text, now)
 	if err != nil {
+		log.Printf("instagram webhook processing error: %v", err)
 		return err
 	}
 	if !outcome.OwnsReply {

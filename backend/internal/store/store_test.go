@@ -34,8 +34,44 @@ func TestOpenAppliesFoundationMigrationOnce(t *testing.T) {
 	if err := db.QueryRow(`SELECT count(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if count != 10 {
-		t.Fatalf("migration count = %d, want 10", count)
+	if count != 11 {
+		t.Fatalf("migration count = %d, want 11", count)
+	}
+}
+
+func TestMigrateRepairsInstagramNoteEventsForeignKey(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "sqlite.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	if _, err := db.Exec(`
+		INSERT INTO users (id, name, email, password_hash) VALUES (1, 'Test', 'test@example.com', 'hash');
+		INSERT INTO notes (id, user_id, title, content_markdown, source) VALUES (1, 1, 'title', 'body', 'instagram');
+		PRAGMA foreign_keys=OFF;
+		ALTER TABLE instagram_note_events RENAME TO instagram_note_events_current;
+		CREATE TABLE instagram_note_events (external_message_id TEXT PRIMARY KEY, note_id INTEGER NOT NULL REFERENCES notes_before_facebook(id) ON DELETE CASCADE);
+		INSERT INTO instagram_note_events VALUES ('event-1', 1);
+		DROP TABLE instagram_note_events_current;
+		DELETE FROM schema_migrations WHERE name='0010_repair_instagram_note_events.sql';
+		PRAGMA foreign_keys=ON;
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if err := Migrate(db); err != nil {
+		t.Fatal(err)
+	}
+	var target string
+	if err := db.QueryRow(`SELECT "table" FROM pragma_foreign_key_list('instagram_note_events') WHERE "from"='note_id'`).Scan(&target); err != nil {
+		t.Fatal(err)
+	}
+	if target != "notes" {
+		t.Fatalf("note_id references %q, want notes", target)
+	}
+	var count int
+	if err := db.QueryRow(`SELECT count(*) FROM instagram_note_events WHERE external_message_id='event-1' AND note_id=1`).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("preserved event count = %d, err %v", count, err)
 	}
 }
 
