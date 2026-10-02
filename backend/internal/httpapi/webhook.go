@@ -131,6 +131,7 @@ func (api *API) instagramWebhook(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
+	log.Printf("instagram webhook raw body=%s", body)
 	var payload instagramWebhookPayload
 	if err := json.Unmarshal(body, &payload); err != nil {
 		result = "malformed_json"

@@ -169,12 +169,43 @@ func TestInstagramWebhookLogsSafeReceiptAndResults(t *testing.T) {
 					t.Errorf("logs missing %q: %s", want, got)
 				}
 			}
+			got = strings.Replace(got, "instagram webhook raw body="+tc.body+"\n", "", 1)
 			for _, secret := range []string{"private-message", "invalid-signature-body", "raw-sender-id", "raw-recipient-id", "raw-mid", "signature-secret-message", "app-secret"} {
 				if strings.Contains(got, secret) {
 					t.Errorf("logs exposed %q: %s", secret, got)
 				}
 			}
 		})
+	}
+}
+
+func TestInstagramWebhookRecordsSignedRawBodyBeforeParsing(t *testing.T) {
+	h, _ := webhookHandler(t, "verify", "app-secret")
+	oldWriter, oldFlags := log.Writer(), log.Flags()
+	var logs bytes.Buffer
+	log.SetOutput(&logs)
+	log.SetFlags(0)
+	t.Cleanup(func() { log.SetOutput(oldWriter); log.SetFlags(oldFlags) })
+
+	body := `{"raw":"before-parser"`
+	r := httptest.NewRequest(http.MethodPost, "/api/integrations/instagram/webhook", strings.NewReader(body))
+	r.Header.Set("X-Hub-Signature-256", signWebhook("app-secret", []byte(body)))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	got := logs.String()
+	rawAt := strings.Index(got, "instagram webhook raw body="+body)
+	resultAt := strings.Index(got, "instagram webhook result=malformed_json")
+	if w.Code != http.StatusBadRequest || rawAt < 0 || resultAt < 0 || rawAt > resultAt {
+		t.Fatalf("status=%d raw_at=%d result_at=%d logs=%q", w.Code, rawAt, resultAt, got)
+	}
+
+	logs.Reset()
+	r = httptest.NewRequest(http.MethodPost, "/api/integrations/instagram/webhook", strings.NewReader(body))
+	r.Header.Set("X-Hub-Signature-256", signWebhook("wrong-secret", []byte(body)))
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if strings.Contains(logs.String(), body) {
+		t.Fatalf("unauthenticated body recorded: %q", logs.String())
 	}
 }
 
