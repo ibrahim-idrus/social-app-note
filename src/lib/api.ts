@@ -1,7 +1,7 @@
 export type User = { id: number; name: string; email: string; created_at: string; updated_at: string };
 export type MatchRange = { start: number; end: number };
 export type NoteSearchSection = { heading: string; heading_path: string[]; anchor: string; excerpt: string; matches: MatchRange[] };
-export type InstagramAttachment = { type: 'ig_post' | 'ig_reel'; url: string; media_id: string; alt: string };
+export type InstagramAttachment = { type: 'ig_post' | 'ig_reel'; url: string; media_id: string; permalink?: string; alt: string };
 export type FacebookAttachment = { type: 'fallback' | 'reel'; url: string; title?: string; lookup_status?: 'captured' | 'unavailable' };
 export type Note = {
 	id: number;

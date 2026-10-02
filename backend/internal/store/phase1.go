@@ -42,6 +42,7 @@ type InstagramAttachment struct {
 	Type             string `json:"type"`
 	URL              string `json:"url"`
 	InstagramMediaID string `json:"media_id,omitempty"`
+	Permalink        string `json:"permalink,omitempty"`
 	Alt              string `json:"alt"`
 }
 

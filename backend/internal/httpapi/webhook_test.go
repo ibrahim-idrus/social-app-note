@@ -209,6 +209,35 @@ func TestInstagramWebhookRecordsSignedRawBodyBeforeParsing(t *testing.T) {
 	}
 }
 
+func TestInstagramWebhookUnsupportedAttachmentDiagnosticIsSafe(t *testing.T) {
+	h, _ := webhookHandler(t, "verify", "app-secret")
+	oldWriter, oldFlags := log.Writer(), log.Flags()
+	var logs bytes.Buffer
+	log.SetOutput(&logs)
+	log.SetFlags(0)
+	t.Cleanup(func() { log.SetOutput(oldWriter); log.SetFlags(oldFlags) })
+
+	body := `{"object":"instagram","entry":[{"id":"raw-entry-id","messaging":[{"sender":{"id":"raw-sender-id"},"recipient":{"id":"raw-recipient-id"},"message":{"mid":"raw-mid","attachments":[{"type":"private-type","payload":{"title":"private-title","url":"https://private.example/path?token=private-token","thread_post_id":"private-media-id","generic":{"elements":[{"action_url":"https://private.example/thread","image_url":"https://private.example/image","title":"private-card-title"}]}}}]}}]}]}`
+	r := httptest.NewRequest(http.MethodPost, "/api/integrations/instagram/webhook", strings.NewReader(body))
+	r.Header.Set("X-Hub-Signature-256", signWebhook("app-secret", []byte(body)))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%q", w.Code, w.Body.String())
+	}
+	got := strings.Replace(logs.String(), "instagram webhook raw body="+body+"\n", "", 1)
+	for _, want := range []string{"unsupported attachment index=0", "type=private-type", "payload_keys=generic,thread_post_id,title,url", "ig_media_id=false", "reel_video_id=false", "url=true", "url_parse_ok=true", "scheme=https", "host=other", "generic_shape={elements:array(1,{action_url:nested,image_url:nested,title:nested})}", "missing_text=1"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("logs missing %q: %s", want, got)
+		}
+	}
+	for _, private := range []string{"private-title", "private-card-title", "private.example", "/path", "/thread", "/image", "private-token", "private-media-id", "raw-entry-id", "raw-sender-id", "raw-recipient-id", "raw-mid", "app-secret"} {
+		if strings.Contains(got, private) {
+			t.Errorf("logs exposed %q: %s", private, got)
+		}
+	}
+}
+
 func TestInstagramWebhookDoesNotTrustConfiguredUser2WithoutVerification(t *testing.T) {
 	db, err := store.Open(filepath.Join(t.TempDir(), "sqlite.db"))
 	if err != nil {
@@ -310,7 +339,7 @@ func TestObservedInstagramPostFixtureContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	attachments := supportedInstagramAttachments(payload.Entry[0].Messaging[0].Message.Attachments)
-	if len(attachments) != 1 || attachments[0].Type != "ig_post" || attachments[0].URL == "" || attachments[0].InstagramMediaID != "MEDIA_ID" {
+	if len(attachments) != 1 || attachments[0].Type != "ig_post" || attachments[0].URL == "" || attachments[0].InstagramMediaID != "MEDIA_ID" || attachments[0].Permalink != "https://www.instagram.com/p/REDACTED/" {
 		t.Fatalf("attachments=%#v", attachments)
 	}
 }
@@ -325,7 +354,7 @@ func TestObservedInstagramReelFixtureContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	attachments := supportedInstagramAttachments(payload.Entry[0].Messaging[0].Message.Attachments)
-	if len(attachments) != 1 || attachments[0].Type != "ig_reel" || attachments[0].URL != "https://www.instagram.com/reel/REDACTED/" || attachments[0].InstagramMediaID != "REEL_MEDIA_ID" {
+	if len(attachments) != 1 || attachments[0].Type != "ig_reel" || attachments[0].URL != "https://www.instagram.com/reel/REDACTED/" || attachments[0].InstagramMediaID != "REEL_MEDIA_ID" || attachments[0].Permalink != attachments[0].URL {
 		t.Fatalf("attachments=%#v", attachments)
 	}
 }

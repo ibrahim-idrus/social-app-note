@@ -26,19 +26,44 @@ type instagramWebhookEvent struct {
 		ID string `json:"id"`
 	} `json:"recipient"`
 	Message struct {
-		MID         string `json:"mid"`
-		Text        string `json:"text"`
-		IsEcho      bool   `json:"is_echo"`
-		Attachments []struct {
-			Type    string `json:"type"`
-			Payload struct {
-				InstagramMediaID string `json:"ig_post_media_id"`
-				ReelVideoID      string `json:"reel_video_id"`
-				Title            string `json:"title"`
-				URL              string `json:"url"`
-			} `json:"payload"`
-		} `json:"attachments"`
+		MID         string                       `json:"mid"`
+		Text        string                       `json:"text"`
+		IsEcho      bool                         `json:"is_echo"`
+		Attachments []instagramWebhookAttachment `json:"attachments"`
 	} `json:"message"`
+}
+
+type instagramWebhookAttachment struct {
+	Type    string                            `json:"type"`
+	Payload instagramWebhookAttachmentPayload `json:"payload"`
+}
+
+type instagramWebhookAttachmentPayload struct {
+	InstagramMediaID string          `json:"ig_post_media_id"`
+	ReelVideoID      string          `json:"reel_video_id"`
+	Title            string          `json:"title"`
+	URL              string          `json:"url"`
+	Permalink        string          `json:"permalink"`
+	Generic          json.RawMessage `json:"generic"`
+	Keys             []string        `json:"-"`
+}
+
+func (p *instagramWebhookAttachmentPayload) UnmarshalJSON(data []byte) error {
+	type plain instagramWebhookAttachmentPayload
+	var value plain
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	for key := range fields {
+		value.Keys = append(value.Keys, webhookName(key))
+	}
+	sort.Strings(value.Keys)
+	*p = instagramWebhookAttachmentPayload(value)
+	return nil
 }
 
 type instagramWebhookPayload struct {
@@ -53,25 +78,92 @@ type instagramWebhookPayload struct {
 	} `json:"entry"`
 }
 
-func supportedInstagramAttachments(items []struct {
-	Type    string `json:"type"`
-	Payload struct {
-		InstagramMediaID string `json:"ig_post_media_id"`
-		ReelVideoID      string `json:"reel_video_id"`
-		Title            string `json:"title"`
-		URL              string `json:"url"`
-	} `json:"payload"`
-}) []store.InstagramAttachment {
+func supportedInstagramAttachments(items []instagramWebhookAttachment) []store.InstagramAttachment {
 	result := []store.InstagramAttachment{}
 	for _, item := range items {
 		u, err := url.Parse(item.Payload.URL)
+		permalink := instagramPermalink(item.Payload.Permalink)
 		if item.Type == "ig_post" && item.Payload.InstagramMediaID != "" && err == nil && u.Scheme == "https" && u.Hostname() == "lookaside.fbsbx.com" {
-			result = append(result, store.InstagramAttachment{Type: item.Type, URL: item.Payload.URL, InstagramMediaID: item.Payload.InstagramMediaID, Alt: item.Payload.Title})
+			result = append(result, store.InstagramAttachment{Type: item.Type, URL: item.Payload.URL, InstagramMediaID: item.Payload.InstagramMediaID, Permalink: permalink, Alt: item.Payload.Title})
 		} else if item.Type == "ig_reel" && item.Payload.ReelVideoID != "" && err == nil && u.Scheme == "https" && (u.Hostname() == "instagram.com" || u.Hostname() == "www.instagram.com") {
-			result = append(result, store.InstagramAttachment{Type: item.Type, URL: item.Payload.URL, InstagramMediaID: item.Payload.ReelVideoID, Alt: item.Payload.Title})
+			if permalink == "" {
+				permalink = item.Payload.URL
+			}
+			result = append(result, store.InstagramAttachment{Type: item.Type, URL: item.Payload.URL, InstagramMediaID: item.Payload.ReelVideoID, Permalink: permalink, Alt: item.Payload.Title})
 		}
 	}
 	return result
+}
+
+func instagramPermalink(value string) string {
+	u, err := url.Parse(value)
+	if err != nil || u.Scheme != "https" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Hostname() != "instagram.com" && u.Hostname() != "www.instagram.com") {
+		return ""
+	}
+	if !strings.HasPrefix(u.Path, "/p/") && !strings.HasPrefix(u.Path, "/reel/") {
+		return ""
+	}
+	return u.String()
+}
+
+func logUnsupportedInstagramAttachments(items []instagramWebhookAttachment) {
+	for index, item := range items {
+		u, err := url.Parse(item.Payload.URL)
+		scheme, host := "none", "none"
+		if err == nil {
+			scheme = webhookName(u.Scheme)
+			switch u.Hostname() {
+			case "lookaside.fbsbx.com":
+				host = "meta_cdn"
+			case "instagram.com", "www.instagram.com":
+				host = "instagram"
+			default:
+				if u.Hostname() != "" {
+					host = "other"
+				}
+			}
+		}
+		log.Printf("instagram unsupported attachment index=%d type=%s payload_keys=%s ig_media_id=%t reel_video_id=%t url=%t url_parse_ok=%t scheme=%s host=%s", index, webhookName(item.Type), strings.Join(item.Payload.Keys, ","), item.Payload.InstagramMediaID != "", item.Payload.ReelVideoID != "", item.Payload.URL != "", err == nil, scheme, host)
+		if len(item.Payload.Generic) > 0 {
+			log.Printf("instagram unsupported attachment index=%d generic_shape=%s", index, jsonShape(item.Payload.Generic, 0))
+		}
+	}
+}
+
+func jsonShape(data json.RawMessage, depth int) string {
+	if depth >= 3 {
+		return "nested"
+	}
+	var object map[string]json.RawMessage
+	if json.Unmarshal(data, &object) == nil {
+		parts := make([]string, 0, len(object))
+		for key, value := range object {
+			parts = append(parts, webhookName(key)+":"+jsonShape(value, depth+1))
+		}
+		sort.Strings(parts)
+		return "{" + strings.Join(parts, ",") + "}"
+	}
+	var array []json.RawMessage
+	if json.Unmarshal(data, &array) == nil {
+		if len(array) == 0 {
+			return "array(0)"
+		}
+		return fmt.Sprintf("array(%d,%s)", len(array), jsonShape(array[0], depth+1))
+	}
+	var value any
+	if json.Unmarshal(data, &value) != nil {
+		return "invalid"
+	}
+	switch value.(type) {
+	case string:
+		return "string"
+	case float64:
+		return "number"
+	case bool:
+		return "bool"
+	default:
+		return "null"
+	}
 }
 
 func (api *API) instagramWebhookVerify(w http.ResponseWriter, r *http.Request) {
@@ -166,6 +258,9 @@ func (api *API) instagramWebhook(w http.ResponseWriter, r *http.Request) {
 		for _, event := range events {
 			reason := instagramWebhookIgnoreReason(event)
 			if reason != "" {
+				if reason == "missing_text" && len(event.Message.Attachments) > 0 {
+					logUnsupportedInstagramAttachments(event.Message.Attachments)
+				}
 				ignored++
 				reasons[reason]++
 				continue

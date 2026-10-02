@@ -81,6 +81,11 @@ func TestLoad(t *testing.T) {
 			wantAppID: "904155979215067", wantAppSecret: "secret",
 		},
 		{
+			name: "threads credentials accepted for compatibility",
+			contents: "HTTP_ADDR=127.0.0.1:8080\nDATABASE_PATH=sqlite.db\nSESSION_COOKIE_SECURE=false\nINSTAGRAM_ENABLED=false\n" +
+				"THREADS_APP_ID=threads-app\nTHREADS_APP_SECRET=threads-secret\n",
+		},
+		{
 			name: "messenger runtime keys accepted",
 			contents: "HTTP_ADDR=127.0.0.1:8080\nDATABASE_PATH=sqlite.db\nSESSION_COOKIE_SECURE=false\nINSTAGRAM_ENABLED=false\n" +
 				"MESSENGER_PAGE_ID=id\nMESSENGER_PAGE_ACCESS_TOKEN=token\nFACEBOOK_MESSENGER_WEBHOOK_TOKEN=verify\n",

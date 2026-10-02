@@ -21,7 +21,8 @@
                 "payload": {
                   "ig_post_media_id": "MEDIA_ID",
                   "title": "Redacted Instagram post caption",
-                  "url": "https://lookaside.fbsbx.com/ig_messaging_cdn/redacted.webp?asset_id=REDACTED&signature=REDACTED"
+                  "url": "https://lookaside.fbsbx.com/ig_messaging_cdn/redacted.webp?asset_id=REDACTED&signature=REDACTED",
+                  "permalink": "https://www.instagram.com/p/REDACTED/"
                 }
               }
             ]

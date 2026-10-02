@@ -194,6 +194,16 @@ test('Instagram Reel notes use the official embed with a link fallback', async (
 	assert.match(source, /Open on Instagram/);
 });
 
+test('Instagram shared post and Reel links are copyable in note details', async () => {
+	const { readFile } = await import('node:fs/promises');
+	const apiSource = await readFile('src/lib/api.ts', 'utf8');
+	const source = await readFile('src/lib/components/InstagramMedia.svelte', 'utf8');
+	assert.match(apiSource, /permalink\?: string/);
+	assert.match(source, /navigator\.clipboard\.writeText/);
+	assert.match(source, /aria-label="Copy Instagram link"/);
+	assert.match(source, /attachment\.permalink/);
+});
+
 test('Facebook attachments render a native metadata card instead of an unreliable plugin iframe', async () => {
 	const { readFile } = await import('node:fs/promises');
 	const apiSource = await readFile('src/lib/api.ts', 'utf8');
