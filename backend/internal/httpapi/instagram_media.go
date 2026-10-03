@@ -69,6 +69,16 @@ func (api *API) resolveInstagramMedia(w http.ResponseWriter, r *http.Request, au
 }
 
 func (api *API) fetchInstagramAttachment(ctx context.Context, attachment store.InstagramAttachment, noteID int64, position int) ([]store.InstagramCachedMedia, error) {
+	if direct, err := url.Parse(attachment.URL); err == nil && direct.Scheme == "https" && safeInstagramMediaHost(direct.Hostname()) {
+		kind := "image"
+		if attachment.Type == "ig_reel" {
+			kind = "video"
+		}
+		item, err := api.cacheInstagramURL(ctx, attachment.URL, noteID, position, 0, kind)
+		if err == nil {
+			return []store.InstagramCachedMedia{item}, nil
+		}
+	}
 	if attachment.InstagramMediaID == "" || api.instagramAccessToken == "" {
 		return nil, errors.New("missing media reference")
 	}

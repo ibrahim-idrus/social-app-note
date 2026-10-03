@@ -71,6 +71,29 @@ func TestInstagramMediaRoutesRequireOwnerCSRFAndCacheBytes(t *testing.T) {
 	}
 }
 
+func TestInstagramMediaCachesWebhookURLWithoutGraphLookup(t *testing.T) {
+	calls := 0
+	client := &http.Client{Transport: mediaRoundTripper(func(r *http.Request) (*http.Response, error) {
+		calls++
+		if r.URL.Host != "lookaside.fbsbx.com" {
+			t.Fatalf("unexpected provider lookup: %s", r.URL)
+		}
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"image/jpeg"}}, Body: io.NopCloser(strings.NewReader("post-bytes")), Request: r}, nil
+	})}
+	a := newTestClientWithOptions(t, false, Options{HTTPClient: client, InstagramAccessToken: "token", InstagramMediaCacheDir: t.TempDir()})
+	a.register(t, "Alice", "alice-direct@example.com")
+	created := a.request(t, http.MethodPost, "/api/notes", map[string]string{"title": "ig", "content_markdown": ""}, true)
+	id := int(createdJSONID(t, created))
+	_, err := a.db.Exec(`UPDATE notes SET source='instagram',instagram_attachments_json='[{"type":"ig_post","url":"https://lookaside.fbsbx.com/ig_messaging_cdn/?asset_id=m1","media_id":"m1","alt":"post"}]' WHERE id=?`, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved := a.request(t, http.MethodPost, "/api/notes/"+itoa(id)+"/instagram-media/resolve", nil, true)
+	if resolved.Code != 200 || !strings.Contains(resolved.Body.String(), `"kind":"image"`) || calls != 1 {
+		t.Fatalf("resolve=%d calls=%d %s", resolved.Code, calls, resolved.Body.String())
+	}
+}
+
 func createdJSONID(t *testing.T, r *httptest.ResponseRecorder) int64 {
 	t.Helper()
 	var value struct {
