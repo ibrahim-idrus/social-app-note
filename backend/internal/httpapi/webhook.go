@@ -78,6 +78,7 @@ type instagramWebhookPayload struct {
 	} `json:"entry"`
 }
 
+// lookupInstagramMessage remains for explicit diagnostics/tests; webhook ingestion never calls it.
 func (api *API) lookupInstagramMessage(ctx context.Context, messageID string) (json.RawMessage, error) {
 	if api.instagramAccessToken == "" || messageID == "" {
 		return nil, nil
@@ -87,9 +88,9 @@ func (api *API) lookupInstagramMessage(ctx context.Context, messageID string) (j
 	if err != nil {
 		return nil, err
 	}
-	query := req.URL.Query()
-	query.Set("fields", "message,attachments,shares{data{name,description,type,url,id}}")
-	req.URL.RawQuery = query.Encode()
+	q := req.URL.Query()
+	q.Set("fields", "message,attachments,shares{data{name,description,type,url,id}}")
+	req.URL.RawQuery = q.Encode()
 	req.Header.Set("Authorization", "Bearer "+api.instagramAccessToken)
 	res, err := api.httpClient.Do(req)
 	if err != nil {
@@ -322,18 +323,7 @@ func (api *API) instagramWebhook(w http.ResponseWriter, r *http.Request) {
 		for _, event := range events {
 			reason := instagramWebhookIgnoreReason(event)
 			attachments := supportedInstagramAttachments(event.Message.Attachments)
-			if !event.Message.IsEcho && api.instagramAccessToken != "" && event.Message.MID != "" {
-				diagnostic, lookupErr := api.lookupInstagramMessage(r.Context(), event.Message.MID)
-				if lookupErr != nil {
-					log.Printf("instagram message diagnostic message=%s result=failed", webhookID(event.Message.MID))
-				} else {
-					log.Printf("instagram message diagnostic message=%s result=ok bytes=%d shape=%s", webhookID(event.Message.MID), len(diagnostic), jsonShape(diagnostic, 0))
-					attachments = append(attachments, instagramLinks(diagnostic)...)
-					if reason == "missing_text" && len(attachments) > 0 {
-						reason = ""
-					}
-				}
-			}
+
 			if reason != "" {
 				if reason == "missing_text" && len(event.Message.Attachments) > 0 {
 					logUnsupportedInstagramAttachments(event.Message.Attachments)

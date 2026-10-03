@@ -2,6 +2,7 @@ export type User = { id: number; name: string; email: string; created_at: string
 export type MatchRange = { start: number; end: number };
 export type NoteSearchSection = { heading: string; heading_path: string[]; anchor: string; excerpt: string; matches: MatchRange[] };
 export type InstagramAttachment = { type: 'ig_post' | 'ig_reel'; url: string; media_id: string; permalink?: string; alt: string };
+export type InstagramCachedMedia = { cache_key: string; content_type: string; kind: 'image' | 'video'; position: number };
 export type FacebookAttachment = { type: 'fallback' | 'reel'; url: string; title?: string; lookup_status?: 'captured' | 'unavailable' };
 export type Note = {
 	id: number;
@@ -115,6 +116,8 @@ export function createApiClient(fetcher: Fetch = fetch, cookies = () => typeof d
 		},
 		facebookMessages: async () => (await request<{ messages: FacebookMessage[] }>('/api/facebook-messages')).messages,
 		getNote: (id: number) => request<Note>(`/api/notes/${id}`),
+		resolveInstagramMedia: async (id: number) => (await request<{ media: InstagramCachedMedia[] }>(`/api/notes/${id}/instagram-media/resolve`, { method: 'POST' })).media,
+		instagramMediaURL: (id: number, key: string) => new URL(`./api/notes/${id}/instagram-media/${encodeURIComponent(key)}`, typeof document === 'undefined' ? 'http://localhost/' : document.baseURI).pathname,
 		createNote: (input: { title: string; content: string }) => request<Note>('/api/notes', { method: 'POST', body: JSON.stringify({ title: input.title, content_markdown: input.content }) }),
 		updateNote: (id: number, input: { title: string; content: string }) => request<Note>(`/api/notes/${id}`, { method: 'PUT', body: JSON.stringify({ title: input.title, content_markdown: input.content }) }),
 		deleteNote: (id: number) => request<void>(`/api/notes/${id}`, { method: 'DELETE' }),

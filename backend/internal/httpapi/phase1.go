@@ -40,6 +40,8 @@ type API struct {
 	instagramUser2AccountID                         string
 	productName                                     string
 	httpClient                                      *http.Client
+	instagramMediaClient                            *http.Client
+	instagramMediaCacheDir                          string
 	instagramWebhookVerifyToken, instagramAppSecret string
 	facebookWebhookVerifyToken, facebookAppSecret   string
 	facebookPageID                                  string

@@ -415,16 +415,13 @@ func TestInstagramWebhookProcessingSurvivesMessageLookupFailure(t *testing.T) {
 
 	var status, platformID string
 	err = db.QueryRow(`SELECT status, platform_user_id FROM social_identities WHERE id=?`, registration.ID).Scan(&status, &platformID)
-	if w.Code != http.StatusOK || lookupCalls != 1 || err != nil || status != "active" || platformID != "sender-1" {
+	if w.Code != http.StatusOK || lookupCalls != 0 || err != nil || status != "active" || platformID != "sender-1" {
 		t.Fatalf("status_code=%d lookups=%d identity_status=%q platform_id=%q err=%v", w.Code, lookupCalls, status, platformID, err)
 	}
 	got := logs.String()
-	if !strings.Contains(got, "instagram message diagnostic message="+webhookID("mid-lookup-failure")+" result=failed") {
-		t.Fatalf("missing sanitized diagnostic outcome: %s", got)
-	}
 	for _, secret := range []string{"instagram-user-token", "https://graph.instagram.com/private"} {
 		if strings.Contains(got, secret) {
-			t.Fatalf("diagnostic log exposed %q: %s", secret, got)
+			t.Fatalf("webhook log exposed %q: %s", secret, got)
 		}
 	}
 }

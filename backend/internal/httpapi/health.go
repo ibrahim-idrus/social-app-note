@@ -20,6 +20,7 @@ type Options struct {
 	// Optional trace aid: expected sender ID, logged by webhook, never used for lookup.
 	InstagramUser2AccountID string
 	HTTPClient              *http.Client
+	InstagramMediaCacheDir  string
 }
 
 func Handler(db *sql.DB, options ...Options) http.Handler {
@@ -31,6 +32,15 @@ func Handler(db *sql.DB, options ...Options) http.Handler {
 	if client == nil {
 		client = http.DefaultClient
 	}
+	mediaClient := &http.Client{Timeout: 15 * time.Second, Transport: client.Transport, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 3 || !safeInstagramMediaHost(req.URL.Hostname()) {
+			return http.ErrUseLastResponse
+		}
+		return nil
+	}}
+	if option.InstagramMediaCacheDir == "" {
+		option.InstagramMediaCacheDir = "instagram-media-cache"
+	}
 	if option.InstagramGraphVersion == "" {
 		option.InstagramGraphVersion = "v26.0"
 	}
@@ -41,7 +51,7 @@ func Handler(db *sql.DB, options ...Options) http.Handler {
 		option.FacebookGraphVersion = "v26.0"
 	}
 	facebookEnabled := option.FacebookPageID != ""
-	api := &API{db: db, secureCookies: option.SecureCookies, limiter: newLoginLimiter(), instagramAccountID: option.InstagramAccountID, instagramAccessToken: option.InstagramAccessToken, instagramGraphVersion: option.InstagramGraphVersion, productName: option.ProductName, httpClient: client, instagramWebhookVerifyToken: option.InstagramWebhookVerifyToken, instagramAppSecret: option.InstagramAppSecret, instagramUser2AccountID: option.InstagramUser2AccountID, facebookWebhookVerifyToken: option.FacebookWebhookVerifyToken, facebookAppSecret: option.FacebookAppSecret, facebookPageID: option.FacebookPageID, facebookPageAccessToken: option.FacebookPageAccessToken, facebookGraphVersion: option.FacebookGraphVersion, facebookMessengerEnabled: facebookEnabled}
+	api := &API{db: db, secureCookies: option.SecureCookies, limiter: newLoginLimiter(), instagramAccountID: option.InstagramAccountID, instagramAccessToken: option.InstagramAccessToken, instagramGraphVersion: option.InstagramGraphVersion, productName: option.ProductName, httpClient: client, instagramMediaClient: mediaClient, instagramMediaCacheDir: option.InstagramMediaCacheDir, instagramWebhookVerifyToken: option.InstagramWebhookVerifyToken, instagramAppSecret: option.InstagramAppSecret, instagramUser2AccountID: option.InstagramUser2AccountID, facebookWebhookVerifyToken: option.FacebookWebhookVerifyToken, facebookAppSecret: option.FacebookAppSecret, facebookPageID: option.FacebookPageID, facebookPageAccessToken: option.FacebookPageAccessToken, facebookGraphVersion: option.FacebookGraphVersion, facebookMessengerEnabled: facebookEnabled}
 	_ = store.ConfigureInstagramIntegration(context.Background(), db, option.InstagramAccountID, option.InstagramUsername, option.InstagramAccessToken)
 	if facebookEnabled {
 		_ = store.ConfigureFacebookIntegration(context.Background(), db, option.FacebookPageID)
@@ -76,6 +86,8 @@ func Handler(db *sql.DB, options ...Options) http.Handler {
 	mux.HandleFunc("GET /api/facebook-messages", api.authenticated(api.listFacebookMessages, false))
 	mux.HandleFunc("POST /api/notes", api.authenticated(api.createNote, true))
 	mux.HandleFunc("GET /api/notes/{id}", api.authenticated(api.getNote, false))
+	mux.HandleFunc("POST /api/notes/{id}/instagram-media/resolve", api.authenticated(api.resolveInstagramMedia, true))
+	mux.HandleFunc("GET /api/notes/{id}/instagram-media/{key}", api.authenticated(api.readInstagramMedia, false))
 	mux.HandleFunc("PUT /api/notes/{id}", api.authenticated(api.updateNote, true))
 	mux.HandleFunc("DELETE /api/notes/{id}", api.authenticated(api.deleteNote, true))
 	return mux
