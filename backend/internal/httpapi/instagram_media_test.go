@@ -20,6 +20,9 @@ func TestInstagramMediaRoutesRequireOwnerCSRFAndCacheBytes(t *testing.T) {
 	client := &http.Client{Transport: mediaRoundTripper(func(r *http.Request) (*http.Response, error) {
 		calls++
 		body, contentType := `{"media_type":"CAROUSEL_ALBUM","children":{"data":[{"media_type":"IMAGE","media_url":"https://lookaside.fbsbx.com/first.jpg"},{"media_type":"VIDEO","media_url":"https://lookaside.fbsbx.com/second.mp4","thumbnail_url":"https://lookaside.fbsbx.com/second.jpg"}]}}`, "application/json"
+		if r.URL.Host == "graph.instagram.com" && r.URL.Path != "/v26.0/m1" {
+			return &http.Response{StatusCode: 404, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"error":"unsupported path"}`)), Request: r}, nil
+		}
 		if r.URL.Host == "lookaside.fbsbx.com" {
 			body = "bytes-" + r.URL.Path
 			if strings.HasSuffix(r.URL.Path, ".mp4") {

@@ -72,7 +72,7 @@ func (api *API) fetchInstagramAttachment(ctx context.Context, attachment store.I
 	if attachment.InstagramMediaID == "" || api.instagramAccessToken == "" {
 		return nil, errors.New("missing media reference")
 	}
-	u := fmt.Sprintf("https://graph.instagram.com/%s?fields=media_type,media_url,thumbnail_url,children{media_type,media_url,thumbnail_url}", url.PathEscape(attachment.InstagramMediaID))
+	u := fmt.Sprintf("https://graph.instagram.com/%s/%s?fields=media_type,media_url,thumbnail_url,children{media_type,media_url,thumbnail_url}", url.PathEscape(api.instagramGraphVersion), url.PathEscape(attachment.InstagramMediaID))
 	var metadata instagramResolvedMedia
 	if err := api.getInstagramJSON(ctx, u, &metadata); err != nil {
 		return nil, err
