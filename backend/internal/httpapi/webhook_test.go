@@ -429,6 +429,13 @@ func TestInstagramWebhookProcessingSurvivesMessageLookupFailure(t *testing.T) {
 	}
 }
 
+func TestInstagramLinksExtractsSafePostAndReelPermalinks(t *testing.T) {
+	attachments := instagramLinks(json.RawMessage(`{"attachments":{"data":[{"url":"https://www.instagram.com/p/POST123/"},{"url":"https://www.instagram.com/reel/REEL123/"},{"url":"https://evil.example/p/NOPE/"},{"url":"https://www.instagram.com/p/POST123/?token=secret"}]}}`))
+	if len(attachments) != 2 || attachments[0].Type != "ig_post" || attachments[0].Permalink != "https://www.instagram.com/p/POST123/" || attachments[1].Type != "ig_reel" || attachments[1].Permalink != "https://www.instagram.com/reel/REEL123/" {
+		t.Fatalf("attachments=%#v", attachments)
+	}
+}
+
 func TestObservedInstagramPostFixtureContract(t *testing.T) {
 	body, err := os.ReadFile("testdata/instagram-post.json")
 	if err != nil {

@@ -16,7 +16,7 @@
 {#if attachments.length}
 	<section class="instagram-media panel" aria-label="Instagram media">
 		{#each attachments as attachment}
-			{#if attachment.type === 'ig_post'}
+			{#if attachment.type === 'ig_post' && attachment.url.includes('lookaside.fbsbx.com')}
 				<img src={attachment.url} alt={attachment.alt || 'Shared Instagram post'} loading="lazy" />
 			{:else if attachment.type === 'ig_reel'}
 				<iframe src={reelEmbed(attachment.permalink || attachment.url)} title={attachment.alt || 'Shared Instagram Reel'} loading="lazy" allowfullscreen></iframe>

@@ -130,6 +130,46 @@ func instagramPermalink(value string) string {
 	return u.String()
 }
 
+func instagramLinks(data json.RawMessage) []store.InstagramAttachment {
+	var value any
+	if json.Unmarshal(data, &value) != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var result []store.InstagramAttachment
+	var visit func(any)
+	visit = func(value any) {
+		switch value := value.(type) {
+		case map[string]any:
+			for _, child := range value {
+				visit(child)
+			}
+		case []any:
+			for _, child := range value {
+				visit(child)
+			}
+		case string:
+			link := instagramPermalink(value)
+			if link == "" || seen[link] {
+				return
+			}
+			seen[link] = true
+			typeName := "ig_post"
+			if strings.HasPrefix(mustURLPath(link), "/reel/") {
+				typeName = "ig_reel"
+			}
+			result = append(result, store.InstagramAttachment{Type: typeName, URL: link, Permalink: link, Alt: "Shared Instagram link"})
+		}
+	}
+	visit(value)
+	return result
+}
+
+func mustURLPath(value string) string {
+	u, _ := url.Parse(value)
+	return u.Path
+}
+
 func logUnsupportedInstagramAttachments(items []instagramWebhookAttachment) {
 	for index, item := range items {
 		u, err := url.Parse(item.Payload.URL)
@@ -281,12 +321,17 @@ func (api *API) instagramWebhook(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, event := range events {
 			reason := instagramWebhookIgnoreReason(event)
+			attachments := supportedInstagramAttachments(event.Message.Attachments)
 			if !event.Message.IsEcho && api.instagramAccessToken != "" && event.Message.MID != "" {
 				diagnostic, lookupErr := api.lookupInstagramMessage(r.Context(), event.Message.MID)
 				if lookupErr != nil {
 					log.Printf("instagram message diagnostic message=%s result=failed", webhookID(event.Message.MID))
 				} else {
 					log.Printf("instagram message diagnostic message=%s result=ok bytes=%d shape=%s", webhookID(event.Message.MID), len(diagnostic), jsonShape(diagnostic, 0))
+					attachments = append(attachments, instagramLinks(diagnostic)...)
+					if reason == "missing_text" && len(attachments) > 0 {
+						reason = ""
+					}
 				}
 			}
 			if reason != "" {
@@ -298,7 +343,6 @@ func (api *API) instagramWebhook(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			log.Printf("instagram webhook event type=text entry=%s sender=%s recipient=%s message=%s", webhookID(entry.ID), webhookID(event.Sender.ID), webhookID(event.Recipient.ID), webhookID(event.Message.MID))
-			attachments := supportedInstagramAttachments(event.Message.Attachments)
 			if len(attachments) > 0 {
 				_, err = store.ProcessInstagramMessage(r.Context(), api.db, event.Recipient.ID, event.Sender.ID, event.Message.MID, event.Message.Text, attachments, time.Now().UTC().Format(time.RFC3339Nano))
 			} else {
