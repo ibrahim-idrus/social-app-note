@@ -78,6 +78,30 @@ type instagramWebhookPayload struct {
 	} `json:"entry"`
 }
 
+func (api *API) lookupInstagramMessage(ctx context.Context, messageID string) (json.RawMessage, error) {
+	if api.instagramAccessToken == "" || messageID == "" {
+		return nil, nil
+	}
+	endpoint := fmt.Sprintf("https://graph.instagram.com/%s/%s", url.PathEscape(api.instagramGraphVersion), url.PathEscape(messageID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	query := req.URL.Query()
+	query.Set("fields", "message,attachments,shares{data{name,description,type,url,id}}")
+	req.URL.RawQuery = query.Encode()
+	req.Header.Set("Authorization", "Bearer "+api.instagramAccessToken)
+	res, err := api.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("instagram message lookup failed: status %d", res.StatusCode)
+	}
+	return io.ReadAll(io.LimitReader(res.Body, maxBodyBytes))
+}
+
 func supportedInstagramAttachments(items []instagramWebhookAttachment) []store.InstagramAttachment {
 	result := []store.InstagramAttachment{}
 	for _, item := range items {
@@ -257,6 +281,14 @@ func (api *API) instagramWebhook(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, event := range events {
 			reason := instagramWebhookIgnoreReason(event)
+			if !event.Message.IsEcho && api.instagramAccessToken != "" && event.Message.MID != "" {
+				diagnostic, lookupErr := api.lookupInstagramMessage(r.Context(), event.Message.MID)
+				if lookupErr != nil {
+					log.Printf("instagram message diagnostic message=%s result=failed", webhookID(event.Message.MID))
+				} else {
+					log.Printf("instagram message diagnostic message=%s result=ok bytes=%d shape=%s", webhookID(event.Message.MID), len(diagnostic), jsonShape(diagnostic, 0))
+				}
+			}
 			if reason != "" {
 				if reason == "missing_text" && len(event.Message.Attachments) > 0 {
 					logUnsupportedInstagramAttachments(event.Message.Attachments)
