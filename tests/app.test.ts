@@ -17,6 +17,16 @@ test('notes search, filtering, sorting, and pagination are sent to the backend',
 	assert.equal(request?.credentials, 'same-origin');
 });
 
+test('Instagram cached media uses the root API route from a note detail page', () => {
+	const previousDocument = globalThis.document;
+	Object.defineProperty(globalThis, 'document', { configurable: true, value: { baseURI: 'https://dev-social-notes.ahsanworks.com/notes/46' } });
+	try {
+		assert.equal(createApiClient().instagramMediaURL(46, 'media image.jfif'), '/api/notes/46/instagram-media/media%20image.jfif');
+	} finally {
+		Object.defineProperty(globalThis, 'document', { configurable: true, value: previousDocument });
+	}
+});
+
 test('mutations send JSON and the CSRF cookie to the same-origin API', async () => {
 	let request: Request | undefined;
 	const api = createApiClient(async (input, init) => {

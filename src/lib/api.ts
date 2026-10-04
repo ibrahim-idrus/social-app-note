@@ -117,7 +117,7 @@ export function createApiClient(fetcher: Fetch = fetch, cookies = () => typeof d
 		facebookMessages: async () => (await request<{ messages: FacebookMessage[] }>('/api/facebook-messages')).messages,
 		getNote: (id: number) => request<Note>(`/api/notes/${id}`),
 		resolveInstagramMedia: async (id: number) => (await request<{ media: InstagramCachedMedia[] }>(`/api/notes/${id}/instagram-media/resolve`, { method: 'POST' })).media,
-		instagramMediaURL: (id: number, key: string) => new URL(`./api/notes/${id}/instagram-media/${encodeURIComponent(key)}`, typeof document === 'undefined' ? 'http://localhost/' : document.baseURI).pathname,
+		instagramMediaURL: (id: number, key: string) => `/api/notes/${id}/instagram-media/${encodeURIComponent(key)}`,
 		createNote: (input: { title: string; content: string }) => request<Note>('/api/notes', { method: 'POST', body: JSON.stringify({ title: input.title, content_markdown: input.content }) }),
 		updateNote: (id: number, input: { title: string; content: string }) => request<Note>(`/api/notes/${id}`, { method: 'PUT', body: JSON.stringify({ title: input.title, content_markdown: input.content }) }),
 		deleteNote: (id: number) => request<void>(`/api/notes/${id}`, { method: 'DELETE' }),
