@@ -94,6 +94,47 @@ func TestInstagramMediaCachesWebhookURLWithoutGraphLookup(t *testing.T) {
 	}
 }
 
+func TestInstagramMediaRecoversAndPersistsMissingPermalinkOnDetailLookup(t *testing.T) {
+	calls := 0
+	client := &http.Client{Transport: mediaRoundTripper(func(r *http.Request) (*http.Response, error) {
+		calls++
+		if r.URL.Host == "graph.instagram.com" {
+			if r.URL.Path != "/v26.0/message-mid" {
+				t.Fatalf("unexpected provider lookup: %s", r.URL)
+			}
+			return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"attachments":{"data":[{"url":"https://www.instagram.com/p/recovered/"}]}}`)), Request: r}, nil
+		}
+		if r.URL.Host != "lookaside.fbsbx.com" {
+			t.Fatalf("unexpected media request: %s", r.URL)
+		}
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"image/jpeg"}}, Body: io.NopCloser(strings.NewReader("post-bytes")), Request: r}, nil
+	})}
+	a := newTestClientWithOptions(t, false, Options{HTTPClient: client, InstagramAccessToken: "token", InstagramMediaCacheDir: t.TempDir()})
+	a.register(t, "Alice", "alice-permalink@example.com")
+	created := a.request(t, http.MethodPost, "/api/notes", map[string]string{"title": "ig", "content_markdown": ""}, true)
+	id := int(createdJSONID(t, created))
+	_, err := a.db.Exec(`UPDATE notes SET source='instagram',external_message_id='message-mid',instagram_attachments_json='[{"type":"ig_post","url":"https://lookaside.fbsbx.com/media.jpg","media_id":"m1","alt":"post"}]' WHERE id=?`, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resolved := a.request(t, http.MethodPost, "/api/notes/"+itoa(id)+"/instagram-media/resolve", nil, true)
+	if resolved.Code != 200 || calls != 2 {
+		t.Fatalf("resolve=%d calls=%d %s", resolved.Code, calls, resolved.Body.String())
+	}
+	var raw string
+	if err := a.db.QueryRow(`SELECT instagram_attachments_json FROM notes WHERE id=?`, id).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(raw, `"permalink":"https://www.instagram.com/p/recovered/"`) {
+		t.Fatalf("attachments=%s", raw)
+	}
+	_ = a.request(t, http.MethodPost, "/api/notes/"+itoa(id)+"/instagram-media/resolve", nil, true)
+	if calls != 2 {
+		t.Fatalf("successful lookup was not cached: calls=%d", calls)
+	}
+}
+
 func createdJSONID(t *testing.T, r *httptest.ResponseRecorder) int64 {
 	t.Helper()
 	var value struct {

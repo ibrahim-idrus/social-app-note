@@ -196,11 +196,13 @@ test('Facebook message history API remains authenticated but its table stays off
 	assert.doesNotMatch(source, /Facebook messages|facebookMessages|api\.facebookMessages/);
 });
 
-test('Instagram Reel notes use the official embed with a link fallback', async () => {
+test('Instagram Reel notes render the official playable embed only when cached video is unavailable', async () => {
 	const { readFile } = await import('node:fs/promises');
 	const source = await readFile('src/lib/components/InstagramMedia.svelte', 'utf8');
-	assert.match(source, /attachment\.type === 'ig_reel'/);
-	assert.match(source, /\/embed\//);
+	assert.match(source, /hasPlayableVideo/);
+	assert.match(source, /attachment\.type === 'ig_reel' && link && !hasPlayableVideo/);
+	assert.match(source, /<iframe[^>]+src=\{reelEmbed\(link\)\}/);
+	assert.match(source, /title="Instagram Reel"/);
 	assert.match(source, /Open on Instagram/);
 });
 

@@ -146,6 +146,25 @@ func NoteByID(ctx context.Context, db *sql.DB, userID, id int64) (Note, error) {
 	return note, err
 }
 
+func UpdateInstagramAttachments(ctx context.Context, db *sql.DB, userID, id int64, attachments []InstagramAttachment) error {
+	raw, err := json.Marshal(attachments)
+	if err != nil {
+		return err
+	}
+	result, err := db.ExecContext(ctx, `UPDATE notes SET instagram_attachments_json=? WHERE id=? AND user_id=?`, raw, id, userID)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func UpdateNote(ctx context.Context, db *sql.DB, userID, id int64, title, content string) (Note, error) {
 	result, err := db.ExecContext(ctx, `UPDATE notes SET title = ?, content_markdown = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND user_id = ?`, title, content, id, userID)
 	if err != nil {

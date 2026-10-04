@@ -16,11 +16,15 @@
 {#if attachments.length}
 	<section class="instagram-media panel" aria-label="Instagram media">
 		{#each attachments as attachment, index}
+			{@const hasPlayableVideo = media.some((item) => Math.floor(item.position / 1000) === index && item.kind === 'video')}
 			{#each media.filter((item) => Math.floor(item.position / 1000) === index) as item}
 				{#if item.kind === 'video'}<video src={api.instagramMediaURL(noteId, item.cache_key)} controls preload="metadata"><track kind="captions" /></video>
 				{:else}<img src={api.instagramMediaURL(noteId, item.cache_key)} alt={attachment.alt || 'Shared Instagram post'} loading="lazy" />{/if}
 			{/each}
 			{@const link = attachment.permalink || (attachment.type === 'ig_reel' ? attachment.url : '')}
+			{#if attachment.type === 'ig_reel' && link && !hasPlayableVideo}
+				<iframe src={reelEmbed(link)} title="Instagram Reel" loading="lazy" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+			{/if}
 			{#if link}
 				<div class="permalink">
 					<a href={link} target="_blank" rel="noopener noreferrer" aria-label="Open on Instagram">{link}</a>
@@ -35,6 +39,7 @@
 	.instagram-media { margin-top: 24px; overflow: hidden; }
 	img { display: block; width: 100%; max-height: 70vh; object-fit: contain; background: #f4f4f5; }
 	video { display: block; width: 100%; max-height: 70vh; background: #000; }
+	iframe { display: block; width: 100%; min-height: 620px; border: 0; }
 	.permalink { display: flex; align-items: center; gap: 8px; margin: 12px; }
 	.permalink a { min-width: 0; overflow-wrap: anywhere; color: var(--primary); }
 	button { display: inline-flex; align-items: center; gap: 6px; flex: none; border: 1px solid var(--border); border-radius: 8px; background: var(--background); padding: 7px 10px; cursor: pointer; }

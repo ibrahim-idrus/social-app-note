@@ -15,7 +15,7 @@
 	let error = $state('');
 	let confirmOpen = $state(false);
 	let instagramMedia = $state<InstagramCachedMedia[]>([]);
-	async function load() { loading = true; error = ''; try { note = await api.getNote(Number(page.params.id)); loading = false; if (note.instagram_attachments.length) instagramMedia = await api.resolveInstagramMedia(note.id); } catch (cause) { if (!note) error = cause instanceof Error ? cause.message : 'The note could not load.'; } finally { loading = false; } }
+	async function load() { loading = true; error = ''; try { note = await api.getNote(Number(page.params.id)); loading = false; if (note.instagram_attachments.length) { const resolved = await api.resolveInstagramMedia(note.id); instagramMedia = resolved.media; note.instagram_attachments = resolved.attachments; } } catch (cause) { if (!note) error = cause instanceof Error ? cause.message : 'The note could not load.'; } finally { loading = false; } }
 	async function remove() { if (!note) return; try { await api.deleteNote(note.id); await goto(resolve('/notes')); } catch (cause) { error = cause instanceof Error ? cause.message : 'The note could not be deleted.'; confirmOpen = false; } }
 	onMount(load);
 </script>

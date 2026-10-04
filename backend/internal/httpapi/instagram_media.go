@@ -46,6 +46,28 @@ func (api *API) resolveInstagramMedia(w http.ResponseWriter, r *http.Request, au
 		writeError(w, 500, "internal_error")
 		return
 	}
+	if note.ExternalMessageID != nil && api.instagramAccessToken != "" {
+		missing := false
+		for _, attachment := range note.InstagramAttachments {
+			missing = missing || attachment.Permalink == ""
+		}
+		if missing {
+			if raw, lookupErr := api.lookupInstagramMessage(r.Context(), *note.ExternalMessageID); lookupErr == nil {
+				links := instagramLinks(raw)
+				changed := false
+				for i := range note.InstagramAttachments {
+					if note.InstagramAttachments[i].Permalink == "" && len(links) > 0 {
+						note.InstagramAttachments[i].Permalink = links[0].Permalink
+						changed = true
+						links = links[1:]
+					}
+				}
+				if changed {
+					_ = store.UpdateInstagramAttachments(r.Context(), api.db, auth.ID, noteID, note.InstagramAttachments)
+				}
+			}
+		}
+	}
 	result := make([]store.InstagramCachedMedia, 0)
 	for position, attachment := range note.InstagramAttachments {
 		key := fmt.Sprint(position)
@@ -65,7 +87,7 @@ func (api *API) resolveInstagramMedia(w http.ResponseWriter, r *http.Request, au
 		result = append(result, items...)
 	}
 	sort.SliceStable(result, func(i, j int) bool { return result[i].Position < result[j].Position })
-	writeJSON(w, http.StatusOK, map[string]any{"media": result})
+	writeJSON(w, http.StatusOK, map[string]any{"media": result, "attachments": note.InstagramAttachments})
 }
 
 func (api *API) fetchInstagramAttachment(ctx context.Context, attachment store.InstagramAttachment, noteID int64, position int) ([]store.InstagramCachedMedia, error) {
