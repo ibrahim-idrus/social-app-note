@@ -7,3 +7,4 @@
 - Add title/body search with multi-source and multi-tag filters.
 - Require an explicit **Load post** action before resolving social media details.
 - Add note multi-selection, confirmed bulk deletion, and combined Markdown download.
+- Backfill tags for existing notes, bound repeated filters, and hide post loading for unsupported URLs.

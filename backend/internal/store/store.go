@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"fmt"
@@ -77,10 +78,51 @@ func Migrate(db *sql.DB) error {
 		if err := tx.Commit(); err != nil {
 			return fmt.Errorf("commit migration %s: %w", entry.Name(), err)
 		}
+		if entry.Name() == "0013_backfill_note_tags.sql" {
+			if err := backfillNoteTags(db); err != nil {
+				return fmt.Errorf("backfill note tags: %w", err)
+			}
+		}
 	}
 	// 0006_facebook_messenger rebuilt notes without the attachment column when
 	// applied after 0006_instagram_attachments on existing databases.
 	return ensureColumn(db, "notes", "instagram_attachments_json", "TEXT")
+}
+
+func backfillNoteTags(db *sql.DB) error {
+	rows, err := db.Query(`SELECT id, content_markdown FROM notes`)
+	if err != nil {
+		return err
+	}
+	var notes []struct {
+		id      int64
+		content string
+	}
+	for rows.Next() {
+		var note struct {
+			id      int64
+			content string
+		}
+		if err := rows.Scan(&note.id, &note.content); err != nil {
+			rows.Close()
+			return err
+		}
+		notes = append(notes, note)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, note := range notes {
+		if err := analyzeNoteTags(context.Background(), tx, note.id, note.content); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func ensureColumn(db *sql.DB, table, column, definition string) error {

@@ -291,6 +291,7 @@ func TestNoteListSearchFilterSortPaginationAndValidation(t *testing.T) {
 	for _, path := range []string{
 		"/api/notes?source=email", "/api/notes?sort=user_id", "/api/notes?order=sideways",
 		"/api/notes?page=0", "/api/notes?page_size=101", "/api/notes?q=" + strings.Repeat("x", 201),
+		"/api/notes?tag=" + strings.Repeat("x", 101), "/api/notes?tag=first&" + strings.Repeat("tag=tag&", 50),
 	} {
 		if got := c.request(t, http.MethodGet, path, nil, false).Code; got != http.StatusBadRequest {
 			t.Fatalf("invalid list %q = %d", path, got)

@@ -269,6 +269,10 @@ func (api *API) listNotes(w http.ResponseWriter, r *http.Request, auth authentic
 	}
 	sources := values["source"]
 	tags := values["tag"]
+	validFilters := len(sources) <= 3 && len(tags) <= 50
+	for _, tag := range tags {
+		validFilters = validFilters && tag != "" && len([]rune(tag)) <= 100
+	}
 	sortField := values.Get("sort")
 	order := values.Get("order")
 	if sortField == "" {
@@ -290,7 +294,7 @@ func (api *API) listNotes(w http.ResponseWriter, r *http.Request, auth authentic
 		validSource = validSource && (source == "manual" || source == "instagram" || source == "facebook")
 	}
 	validSearch := searchIn == "all" || searchIn == "title" || searchIn == "content"
-	if len([]rune(query)) > 200 || !validSearch || (rawQuery != "" && query == "" && values.Has("search_in")) || !validSource || !validSort || !validOrder || !pageOK || !sizeOK {
+	if len([]rune(query)) > 200 || !validFilters || !validSearch || (rawQuery != "" && query == "" && values.Has("search_in")) || !validSource || !validSort || !validOrder || !pageOK || !sizeOK {
 		writeError(w, http.StatusBadRequest, "invalid_query")
 		return
 	}

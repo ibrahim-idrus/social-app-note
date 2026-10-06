@@ -34,8 +34,8 @@ func TestOpenAppliesFoundationMigrationOnce(t *testing.T) {
 	if err := db.QueryRow(`SELECT count(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if count != 13 {
-		t.Fatalf("migration count = %d, want 13", count)
+	if count != 14 {
+		t.Fatalf("migration count = %d, want 14", count)
 	}
 }
 
@@ -420,5 +420,26 @@ func TestInstagramAttachmentsRequireVerifiedSender(t *testing.T) {
 	_ = db.QueryRow(`SELECT count(*) FROM notes`).Scan(&notes)
 	if notes != 0 {
 		t.Fatalf("notes=%d", notes)
+	}
+}
+
+func TestMigrationBackfillsTagsFromExistingNotes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sqlite.db")
+	db, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(`INSERT INTO users(id,name,email,password_hash) VALUES(1,'A','a@b.c','x'); INSERT INTO notes(user_id,title,content_markdown,source) VALUES(1,'old','before #Legacy','manual'); DELETE FROM note_tags; DELETE FROM schema_migrations WHERE name='0013_backfill_note_tags.sql'`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	db, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var count int
+	if err = db.QueryRow(`SELECT count(*) FROM note_tags nt JOIN tags t ON t.id=nt.tag_id WHERE t.normalized_name='legacy'`).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("backfill count=%d err=%v", count, err)
 	}
 }

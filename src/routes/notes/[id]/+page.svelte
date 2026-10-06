@@ -18,7 +18,7 @@
 	let postLoading = $state(false);
 	let postError = $state('');
 	let postLoaded = $state(false);
-	let hasPostURL = $derived(!!note && (/https?:\/\/\S+/.test(note.content_markdown) || note.instagram_attachments.length > 0 || note.facebook_attachments.length > 0));
+	let hasPostURL = $derived(!!note && ((note.source === 'instagram' && note.instagram_attachments.length > 0) || (note.source === 'facebook' && note.facebook_attachments.length > 0)));
 	async function load() { loading = true; error = ''; try { note = await api.getNote(Number(page.params.id)); } catch (cause) { error = cause instanceof Error ? cause.message : 'The note could not load.'; } finally { loading = false; } }
 	async function loadPost() { if (!note || postLoading) return; postLoading = true; postError = ''; try { if (note.instagram_attachments.length) { const resolved = await api.resolveInstagramMedia(note.id); instagramMedia = resolved.media; note.instagram_attachments = resolved.attachments; } postLoaded = true; } catch (cause) { postError = cause instanceof Error ? cause.message : 'The post could not load.'; } finally { postLoading = false; } }
 	async function remove() { if (!note) return; try { await api.deleteNote(note.id); await goto(resolve('/notes')); } catch (cause) { error = cause instanceof Error ? cause.message : 'The note could not be deleted.'; confirmOpen = false; } }

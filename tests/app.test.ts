@@ -31,6 +31,8 @@ test('note detail defers Instagram resolution until the user loads the post', as
 	assert.doesNotMatch(initialLoad, /resolveInstagramMedia/);
 	assert.match(source, /postLoading ?\? 'Loading…' : postError ?\? 'Retry loading post' : 'Load post'/);
 	assert.match(source, /async function loadPost/);
+	assert.match(source, /note\.source === 'instagram'.*instagram_attachments\.length.*note\.source === 'facebook'.*facebook_attachments\.length/s);
+	assert.doesNotMatch(source, /\/https\?:\\\/\\\/\\S\+\//);
 });
 
 test('Instagram cached media uses the root API route from a note detail page', () => {
