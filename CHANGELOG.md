@@ -2,7 +2,7 @@
 
 ## 2026-10-06
 
-- Break long note titles and body text, including dashboard rows, instead of allowing horizontal page overflow.
+- Break long note titles, body text, dashboard rows, and search excerpts instead of allowing horizontal page overflow.
 - Replace the split Markdown textarea and preview with a single Milkdown live editor while preserving Markdown storage.
 - Use incoming Instagram and Facebook messages as note titles and store shared URLs before message text.
 - Parse hashtags into tags and reanalyze tags whenever notes are created or updated.
