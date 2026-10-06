@@ -304,7 +304,7 @@ func ProcessInstagramMessage(ctx context.Context, db *sql.DB, recipientID, sende
 			err = tx.QueryRowContext(ctx, `
 				SELECT n.id FROM notes n
 				WHERE n.social_identity_id = ?
-				  AND n.content_markdown = ''
+				  AND (n.content_markdown = '' OR n.content_markdown = json_extract(n.instagram_attachments_json,'$[0].url'))
 				  AND n.instagram_attachments_json IS NOT NULL
 				  AND n.created_at >= ?
 				  AND n.updated_at = n.created_at
@@ -318,20 +318,23 @@ func ProcessInstagramMessage(ctx context.Context, db *sql.DB, recipientID, sende
 		}
 		var count int64 = 1
 		if errors.Is(err, sql.ErrNoRows) {
-			jakarta, loadErr := time.LoadLocation("Asia/Jakarta")
-			if loadErr != nil {
-				return InstagramDMOutcome{}, loadErr
+			urls := []string{}
+			for _, a := range attachments {
+				urls = append(urls, a.URL)
 			}
-			title := "Instagram DM " + instant.In(jakarta).Format("01/02/2006 15:04")
+			title, content := messageNoteFields(text, urls)
 			var raw any
 			if len(attachments) > 0 {
 				raw = string(encoded)
 			}
-			result, insertErr := tx.ExecContext(ctx, `INSERT INTO notes(user_id,social_identity_id,title,content_markdown,source,external_message_id,instagram_attachments_json,created_at,updated_at) VALUES(?,?,?,?, 'instagram',?,?,?,?)`, userID, identityID, title, text, externalMessageID, raw, now, now)
+			result, insertErr := tx.ExecContext(ctx, `INSERT INTO notes(user_id,social_identity_id,title,content_markdown,source,external_message_id,instagram_attachments_json,created_at,updated_at) VALUES(?,?,?,?, 'instagram',?,?,?,?)`, userID, identityID, title, content, externalMessageID, raw, now, now)
 			if insertErr != nil {
 				return InstagramDMOutcome{}, insertErr
 			}
 			noteID, _ = result.LastInsertId()
+			if err := analyzeNoteTags(ctx, tx, noteID, content); err != nil {
+				return InstagramDMOutcome{}, err
+			}
 		} else if err != nil {
 			return InstagramDMOutcome{}, err
 		} else {
@@ -341,7 +344,19 @@ func ProcessInstagramMessage(ctx context.Context, db *sql.DB, recipientID, sende
 				return InstagramDMOutcome{}, err
 			}
 			if text != "" {
-				content = text
+				urls := []string{}
+				for _, a := range attachments {
+					urls = append(urls, a.URL)
+				}
+				if existing.Valid {
+					var old []InstagramAttachment
+					if json.Unmarshal([]byte(existing.String), &old) == nil {
+						for _, a := range old {
+							urls = append(urls, a.URL)
+						}
+					}
+				}
+				_, content = messageNoteFields(text, urls)
 			}
 			if existing.Valid && len(attachments) > 0 {
 				var old []InstagramAttachment
@@ -357,7 +372,11 @@ func ProcessInstagramMessage(ctx context.Context, db *sql.DB, recipientID, sende
 			if len(attachments) > 0 {
 				raw = string(encoded)
 			}
-			if _, err := tx.ExecContext(ctx, `UPDATE notes SET content_markdown=?,instagram_attachments_json=?,updated_at=? WHERE id=?`, content, raw, now, noteID); err != nil {
+			title, _ := messageNoteFields(text, nil)
+			if _, err := tx.ExecContext(ctx, `UPDATE notes SET title=?,content_markdown=?,instagram_attachments_json=?,updated_at=? WHERE id=?`, title, content, raw, now, noteID); err != nil {
+				return InstagramDMOutcome{}, err
+			}
+			if err := analyzeNoteTags(ctx, tx, noteID, content); err != nil {
 				return InstagramDMOutcome{}, err
 			}
 		}

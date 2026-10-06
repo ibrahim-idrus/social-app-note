@@ -100,7 +100,7 @@ func TestProcessFacebookMessageStoresAttachmentsAtomicallyAndDeduplicates(t *tes
 	if err := db.QueryRow(`SELECT count(*) FROM facebook_message_receipts WHERE external_message_id='shared-post' AND status='note_created'`).Scan(&receipts); err != nil {
 		t.Fatal(err)
 	}
-	if notes != 1 || receipts != 1 || content != "Shared Facebook post" || raw != `[{"type":"fallback","url":"https://www.facebook.com/share/p/first"},{"type":"fallback","url":"https://www.facebook.com/share/p/second"}]` {
+	if notes != 1 || receipts != 1 || content != "https://www.facebook.com/share/p/first" || raw != `[{"type":"fallback","url":"https://www.facebook.com/share/p/first"},{"type":"fallback","url":"https://www.facebook.com/share/p/second"}]` {
 		t.Fatalf("notes=%d receipts=%d content=%q attachments=%s", notes, receipts, content, raw)
 	}
 
@@ -112,6 +112,24 @@ func TestProcessFacebookMessageStoresAttachmentsAtomicallyAndDeduplicates(t *tes
 	}
 	if err := db.QueryRow(`SELECT count(*) FROM facebook_message_receipts WHERE external_message_id='retryable-media'`).Scan(&receipts); err != nil || receipts != 0 {
 		t.Fatalf("receipt survived rollback: count=%d err=%v", receipts, err)
+	}
+}
+
+func TestProcessFacebookMessageUsesMessageFieldsAndAnalyzesTags(t *testing.T) {
+	db := newFacebookStoreTest(t)
+	if _, err := db.Exec(`INSERT INTO social_identities (user_id, platform, platform_user_id, username, normalized_username, status) VALUES (1, 'facebook', 'sender-tags', '', '', 'active')`); err != nil {
+		t.Fatal(err)
+	}
+	outcome, err := ProcessFacebookMessage(context.Background(), db, "page-1", "sender-tags", "tagged-message", "Save this #Idea", false, []FacebookAttachment{{URL: "https://example.com/post"}}, time.Now().UTC().Format(time.RFC3339Nano))
+	if err != nil || outcome.Kind != FacebookMessageNoteCreated {
+		t.Fatalf("outcome=%#v err=%v", outcome, err)
+	}
+	var title, body, tag string
+	if err := db.QueryRow(`SELECT n.title,n.content_markdown,t.display_name FROM notes n JOIN note_tags nt ON nt.note_id=n.id JOIN tags t ON t.id=nt.tag_id WHERE n.external_message_id='tagged-message'`).Scan(&title, &body, &tag); err != nil {
+		t.Fatal(err)
+	}
+	if title != "Save this #Idea" || body != "https://example.com/post\nSave this #Idea" || tag != "Idea" {
+		t.Fatalf("title=%q body=%q tag=%q", title, body, tag)
 	}
 }
 
@@ -172,11 +190,10 @@ func TestProcessFacebookMessageBindingRoutingIdempotencyAndRemoval(t *testing.T)
 		}
 	}
 	var aliceNotes, bobNotes int
-	wantTitle := "Facebook Messenger " + now.In(time.FixedZone("WIB", 7*60*60)).Format("01/02/2006 15:04")
-	if err := db.QueryRow(`SELECT count(*) FROM notes WHERE user_id=1 AND source='facebook' AND title=? AND content_markdown='Alice note'`, wantTitle).Scan(&aliceNotes); err != nil {
+	if err := db.QueryRow(`SELECT count(*) FROM notes WHERE user_id=1 AND source='facebook' AND title='Alice note' AND content_markdown='Alice note'`).Scan(&aliceNotes); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.QueryRow(`SELECT count(*) FROM notes WHERE user_id=2 AND source='facebook' AND title=? AND content_markdown='Bob note'`, wantTitle).Scan(&bobNotes); err != nil {
+	if err := db.QueryRow(`SELECT count(*) FROM notes WHERE user_id=2 AND source='facebook' AND title='Bob note' AND content_markdown='Bob note'`).Scan(&bobNotes); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.QueryRow(`SELECT count(*) FROM notes`).Scan(&notes); err != nil || notes != 2 || aliceNotes != 1 || bobNotes != 1 {

@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
-	"time"
 )
 
 type FacebookIntegration struct {
@@ -166,19 +165,11 @@ func ProcessFacebookMessage(ctx context.Context, db *sql.DB, pageID, psid, exter
 		if len(consumedHash) == sha256.Size && subtle.ConstantTimeCompare(consumedHash, codeHash[:]) == 1 {
 			return commitFacebookMessageOutcome(tx, FacebookMessageOutcome{Kind: FacebookMessageDuplicate, IdentityID: identityID})
 		}
-		instant, err := time.Parse(time.RFC3339Nano, now)
-		if err != nil {
-			return FacebookMessageOutcome{}, err
+		urls := []string{}
+		for _, a := range attachments {
+			urls = append(urls, a.URL)
 		}
-		jakarta, err := time.LoadLocation("Asia/Jakarta")
-		if err != nil {
-			return FacebookMessageOutcome{}, err
-		}
-		title := "Facebook Messenger " + instant.In(jakarta).Format("01/02/2006 15:04")
-		content := text
-		if content == "" {
-			content = "Shared Facebook post"
-		}
+		title, content := messageNoteFields(text, urls)
 		var raw any
 		if len(attachments) > 0 {
 			encoded, err := json.Marshal(attachments)
@@ -193,6 +184,9 @@ func ProcessFacebookMessage(ctx context.Context, db *sql.DB, pageID, psid, exter
 		}
 		noteID, err := result.LastInsertId()
 		if err != nil {
+			return FacebookMessageOutcome{}, err
+		}
+		if err := analyzeNoteTags(ctx, tx, noteID, content); err != nil {
 			return FacebookMessageOutcome{}, err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE facebook_message_receipts SET status='note_created', note_id=? WHERE external_message_id=?`, noteID, externalMessageID); err != nil {

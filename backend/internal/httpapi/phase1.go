@@ -267,7 +267,8 @@ func (api *API) listNotes(w http.ResponseWriter, r *http.Request, auth authentic
 	if searchIn == "" {
 		searchIn = "all"
 	}
-	source := values.Get("source")
+	sources := values["source"]
+	tags := values["tag"]
 	sortField := values.Get("sort")
 	order := values.Get("order")
 	if sortField == "" {
@@ -284,18 +285,30 @@ func (api *API) listNotes(w http.ResponseWriter, r *http.Request, auth authentic
 	pageSize, sizeOK := positiveInt(values.Get("page_size"), 20, 100)
 	validSort := sortField == "title" || sortField == "created_at" || sortField == "updated_at" || (sortField == "relevance" && query != "")
 	validOrder := order == "asc" || order == "desc"
-	validSource := source == "" || source == "manual" || source == "instagram" || source == "facebook"
+	validSource := true
+	for _, source := range sources {
+		validSource = validSource && (source == "manual" || source == "instagram" || source == "facebook")
+	}
 	validSearch := searchIn == "all" || searchIn == "title" || searchIn == "content"
 	if len([]rune(query)) > 200 || !validSearch || (rawQuery != "" && query == "" && values.Has("search_in")) || !validSource || !validSort || !validOrder || !pageOK || !sizeOK {
 		writeError(w, http.StatusBadRequest, "invalid_query")
 		return
 	}
-	result, err := store.ListNotes(r.Context(), api.db, auth.ID, query, searchIn, source, sortField, order, page, pageSize)
+	result, err := store.ListNotesFiltered(r.Context(), api.db, auth.ID, query, searchIn, sources, tags, sortField, order, page, pageSize)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"notes": result.Notes, "total": result.Total, "page": page, "page_size": pageSize})
+}
+
+func (api *API) listTags(w http.ResponseWriter, r *http.Request, auth authentication) {
+	tags, err := store.ListTags(r.Context(), api.db, auth.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tags": tags})
 }
 
 func noteInput(w http.ResponseWriter, r *http.Request) (string, string, bool) {

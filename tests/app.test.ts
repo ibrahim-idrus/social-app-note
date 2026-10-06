@@ -4,17 +4,33 @@ import test from 'node:test';
 import { ApiError, createApiClient } from '../src/lib/api.ts';
 import { renderMarkdown, slugHeading } from '../src/lib/app-utils.ts';
 
-test('notes search, filtering, sorting, and pagination are sent to the backend', async () => {
+test('the app homepage opens the notes library', async () => {
+	const source = await (await import('node:fs/promises')).readFile('src/routes/+page.svelte', 'utf8');
+	assert.match(source, /resolve\('\/notes'\)/);
+	assert.doesNotMatch(source, /resolve\('\/dashboard'\)/);
+});
+
+test('notes search, repeated source/tag filters, sorting, and pagination are sent to the backend', async () => {
 	let request: Request | undefined;
 	const api = createApiClient(async (input, init) => {
 		request = new Request(input, init);
-		return Response.json({ notes: [], total: 0, page: 3, page_size: 5 });
+		return Response.json({ notes: [], total: 0, page: 3, page_size: 5, tags: [] });
 	});
 
-	await api.listNotes({ query: 'camera kit', searchIn: 'content', source: 'instagram', sort: 'relevance', order: 'desc', page: 3, pageSize: 5 });
+	await api.listNotes({ query: 'camera kit', searchIn: 'content', sources: ['instagram', 'manual'], tags: ['work', 'ideas'], sort: 'relevance', order: 'desc', page: 3, pageSize: 5 });
 	const url = new URL(request!.url);
-	assert.deepEqual(Object.fromEntries(url.searchParams), { sort: 'relevance', order: 'desc', page: '3', page_size: '5', q: 'camera kit', search_in: 'content', source: 'instagram' });
+	assert.deepEqual(url.searchParams.getAll('source'), ['instagram', 'manual']);
+	assert.deepEqual(url.searchParams.getAll('tag'), ['work', 'ideas']);
+	assert.equal(url.searchParams.get('search_in'), 'content');
 	assert.equal(request?.credentials, 'same-origin');
+});
+
+test('note detail defers Instagram resolution until the user loads the post', async () => {
+	const source = await (await import('node:fs/promises')).readFile('src/routes/notes/[id]/+page.svelte', 'utf8');
+	const initialLoad = source.match(/async function load\(\)[^]*?\n	}/)?.[0] ?? '';
+	assert.doesNotMatch(initialLoad, /resolveInstagramMedia/);
+	assert.match(source, /postLoading ?\? 'Loading…' : postError ?\? 'Retry loading post' : 'Load post'/);
+	assert.match(source, /async function loadPost/);
 });
 
 test('Instagram cached media uses the root API route from a note detail page', () => {
@@ -180,7 +196,7 @@ test('Facebook is a note source with a badge and filter while Threads is absent'
 	const listSource = await readFile('src/routes/notes/+page.svelte', 'utf8');
 	const detailSource = await readFile('src/routes/notes/[id]/+page.svelte', 'utf8');
 	assert.match(apiSource, /'manual' \| 'instagram' \| 'facebook'/);
-	assert.match(listSource, /<option value="facebook">Facebook Messenger<\/option>/);
+	assert.match(listSource, /\['facebook','Facebook Messenger'\]/);
 	assert.match(listSource, /note\.source==='facebook'/);
 	assert.match(detailSource, /Facebook Messenger note/);
 	assert.doesNotMatch([apiSource, listSource, detailSource].join('\n'), /threads/i);

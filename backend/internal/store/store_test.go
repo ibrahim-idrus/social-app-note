@@ -34,8 +34,86 @@ func TestOpenAppliesFoundationMigrationOnce(t *testing.T) {
 	if err := db.QueryRow(`SELECT count(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if count != 12 {
-		t.Fatalf("migration count = %d, want 12", count)
+	if count != 13 {
+		t.Fatalf("migration count = %d, want 13", count)
+	}
+}
+
+func TestMessageNoteFields(t *testing.T) {
+	tests := []struct {
+		name, text  string
+		urls        []string
+		title, body string
+	}{
+		{"text", "Save this #Idea", nil, "Save this #Idea", "Save this #Idea"},
+		{"url first", "Save this #Idea", []string{"https://example.com/post"}, "Save this #Idea", "https://example.com/post\nSave this #Idea"},
+		{"no duplicate", "See https://example.com/post #Idea", []string{"https://example.com/post"}, "See https://example.com/post #Idea", "See https://example.com/post #Idea"},
+		{"attachment only", "", []string{"https://example.com/post"}, "Shared post", "https://example.com/post"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			title, body := messageNoteFields(tt.text, tt.urls)
+			if title != tt.title || body != tt.body {
+				t.Fatalf("got %q / %q", title, body)
+			}
+		})
+	}
+	long := strings.Repeat("é", 250)
+	title, body := messageNoteFields(long, nil)
+	if len([]rune(title)) != 200 || body != long {
+		t.Fatalf("long title=%d body preserved=%v", len([]rune(title)), body == long)
+	}
+}
+
+func TestNoteTagsAreReanalyzedOnUpdate(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "sqlite.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err = db.Exec(`INSERT INTO users(id,name,email,password_hash) VALUES(1,'A','a@b.c','x')`); err != nil {
+		t.Fatal(err)
+	}
+	note, err := CreateNote(context.Background(), db, 1, "Tagged", "#Idea #café #IDEA punctuation.#no")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(note.Tags, "|") != "café|Idea|no" {
+		t.Fatalf("tags=%#v", note.Tags)
+	}
+	note, err = UpdateNote(context.Background(), db, 1, note.ID, "Changed", "now #Work")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(note.Tags, "|") != "Work" {
+		t.Fatalf("updated tags=%#v", note.Tags)
+	}
+}
+
+func TestListNotesFiltersSourcesAndTagsAndListsAvailableTags(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "sqlite.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err = db.Exec(`INSERT INTO users(id,name,email,password_hash) VALUES(1,'A','a@b.c','x'),(2,'B','b@b.c','x')`); err != nil {
+		t.Fatal(err)
+	}
+	for _, note := range []struct {
+		user        int64
+		title, body string
+	}{{1, "one", "#Red #Blue"}, {1, "two", "#Blue"}, {1, "three", "#Green"}, {2, "private", "#Red"}} {
+		if _, err := CreateNote(context.Background(), db, note.user, note.title, note.body); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := ListNotesFiltered(context.Background(), db, 1, "", "all", []string{"manual", "instagram"}, []string{"red", "green"}, "updated_at", "desc", 1, 20)
+	if err != nil || got.Total != 2 {
+		t.Fatalf("filtered=%#v err=%v", got, err)
+	}
+	tags, err := ListTags(context.Background(), db, 1)
+	if err != nil || strings.Join(tags, "|") != "Blue|Green|Red" {
+		t.Fatalf("tags=%#v err=%v", tags, err)
 	}
 }
 
@@ -321,7 +399,7 @@ func TestInstagramAttachmentSplitCollectionAndReplay(t *testing.T) {
 	if err := db.QueryRow(`SELECT count(*), title, content_markdown, instagram_attachments_json FROM notes`).Scan(&count, &title, &content, &raw); err != nil {
 		t.Fatal(err)
 	}
-	if count != 1 || title != "Instagram DM 09/29/2026 15:19" || content != "follow-up" || !raw.Valid || !strings.Contains(raw.String, `"type":"ig_post"`) || !strings.Contains(raw.String, `"url":"https://lookaside.fbsbx.com/media.webp"`) || !strings.Contains(raw.String, `"media_id":"media-1"`) {
+	if count != 1 || title != "follow-up" || content != "https://lookaside.fbsbx.com/media.webp\nfollow-up" || !raw.Valid || !strings.Contains(raw.String, `"type":"ig_post"`) || !strings.Contains(raw.String, `"url":"https://lookaside.fbsbx.com/media.webp"`) || !strings.Contains(raw.String, `"media_id":"media-1"`) {
 		t.Fatalf("note=%d %q %q %q", count, title, content, raw.String)
 	}
 }

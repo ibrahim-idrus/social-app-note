@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -36,6 +37,71 @@ type Note struct {
 	Sections             []NoteSearchSection   `json:"sections,omitempty"`
 	InstagramAttachments []InstagramAttachment `json:"instagram_attachments"`
 	FacebookAttachments  []FacebookAttachment  `json:"facebook_attachments"`
+	Tags                 []string              `json:"tags"`
+}
+
+var hashtagRE = regexp.MustCompile(`#[\pL\pN_]+`)
+
+func messageNoteFields(text string, urls []string) (string, string) {
+	text = strings.TrimSpace(text)
+	title := text
+	if title == "" {
+		title = "Shared post"
+	}
+	r := []rune(title)
+	if len(r) > 200 {
+		title = string(r[:200])
+	}
+	body := text
+	for i := 0; i < len(urls) && i < 1; i++ {
+		if urls[i] != "" && !strings.Contains(body, urls[i]) {
+			if body == "" {
+				body = urls[i]
+			} else {
+				body = urls[i] + "\n" + body
+			}
+		}
+	}
+	return title, body
+}
+
+func analyzeNoteTags(ctx context.Context, tx *sql.Tx, noteID int64, content string) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM note_tags WHERE note_id=?`, noteID); err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	for _, raw := range hashtagRE.FindAllString(content, -1) {
+		display := strings.TrimPrefix(raw, "#")
+		normalized := strings.ToLower(display)
+		if seen[normalized] {
+			continue
+		}
+		seen[normalized] = true
+		if _, err := tx.ExecContext(ctx, `INSERT INTO tags(normalized_name,display_name) VALUES(?,?) ON CONFLICT(normalized_name) DO NOTHING`, normalized, display); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO note_tags(note_id,tag_id) SELECT ?,id FROM tags WHERE normalized_name=?`, noteID, normalized); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func loadNoteTags(ctx context.Context, db *sql.DB, n *Note) error {
+	rows, err := db.QueryContext(ctx, `SELECT t.display_name FROM tags t JOIN note_tags nt ON nt.tag_id=t.id WHERE nt.note_id=? ORDER BY t.normalized_name`, n.ID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	n.Tags = []string{}
+	for rows.Next() {
+		var tag string
+		if err := rows.Scan(&tag); err != nil {
+			return err
+		}
+		n.Tags = append(n.Tags, tag)
+	}
+	return rows.Err()
 }
 
 type InstagramAttachment struct {
@@ -126,12 +192,23 @@ func DeleteSession(ctx context.Context, db *sql.DB, tokenHash []byte) error {
 }
 
 func CreateNote(ctx context.Context, db *sql.DB, userID int64, title, content string) (Note, error) {
-	result, err := db.ExecContext(ctx, `INSERT INTO notes (user_id, title, content_markdown, source) VALUES (?, ?, ?, 'manual')`, userID, title, content)
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return Note{}, err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `INSERT INTO notes (user_id, title, content_markdown, source) VALUES (?, ?, ?, 'manual')`, userID, title, content)
 	if err != nil {
 		return Note{}, err
 	}
 	id, err := result.LastInsertId()
 	if err != nil {
+		return Note{}, err
+	}
+	if err = analyzeNoteTags(ctx, tx, id, content); err != nil {
+		return Note{}, err
+	}
+	if err = tx.Commit(); err != nil {
 		return Note{}, err
 	}
 	return NoteByID(ctx, db, userID, id)
@@ -143,6 +220,9 @@ func NoteByID(ctx context.Context, db *sql.DB, userID, id int64) (Note, error) {
 		SELECT id, user_id, social_identity_id, title, content_markdown, source, external_message_id, created_at, updated_at, instagram_attachments_json, facebook_attachments_json
 		FROM notes WHERE id = ? AND user_id = ?`, id, userID)
 	err := scanNote(row, &note)
+	if err == nil {
+		err = loadNoteTags(ctx, db, &note)
+	}
 	return note, err
 }
 
@@ -166,7 +246,12 @@ func UpdateInstagramAttachments(ctx context.Context, db *sql.DB, userID, id int6
 }
 
 func UpdateNote(ctx context.Context, db *sql.DB, userID, id int64, title, content string) (Note, error) {
-	result, err := db.ExecContext(ctx, `UPDATE notes SET title = ?, content_markdown = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND user_id = ?`, title, content, id, userID)
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return Note{}, err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `UPDATE notes SET title = ?, content_markdown = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND user_id = ?`, title, content, id, userID)
 	if err != nil {
 		return Note{}, err
 	}
@@ -175,6 +260,12 @@ func UpdateNote(ctx context.Context, db *sql.DB, userID, id int64, title, conten
 			return Note{}, err
 		}
 		return Note{}, sql.ErrNoRows
+	}
+	if err = analyzeNoteTags(ctx, tx, id, content); err != nil {
+		return Note{}, err
+	}
+	if err = tx.Commit(); err != nil {
+		return Note{}, err
 	}
 	return NoteByID(ctx, db, userID, id)
 }
@@ -194,6 +285,14 @@ func DeleteNote(ctx context.Context, db *sql.DB, userID, id int64) error {
 }
 
 func ListNotes(ctx context.Context, db *sql.DB, userID int64, query, searchIn, source, sortField, order string, page, pageSize int) (NoteList, error) {
+	var sources []string
+	if source != "" {
+		sources = []string{source}
+	}
+	return ListNotesFiltered(ctx, db, userID, query, searchIn, sources, nil, sortField, order, page, pageSize)
+}
+
+func ListNotesFiltered(ctx context.Context, db *sql.DB, userID int64, query, searchIn string, sources, tags []string, sortField, order string, page, pageSize int) (NoteList, error) {
 	where := `user_id = ?`
 	args := []any{userID}
 	if query != "" {
@@ -210,9 +309,17 @@ func ListNotes(ctx context.Context, db *sql.DB, userID int64, query, searchIn, s
 			args = append(args, term, term)
 		}
 	}
-	if source != "" {
-		where += ` AND source = ?`
-		args = append(args, source)
+	if len(sources) > 0 {
+		where += ` AND source IN (` + strings.TrimRight(strings.Repeat("?,", len(sources)), ",") + ")"
+		for _, v := range sources {
+			args = append(args, v)
+		}
+	}
+	if len(tags) > 0 {
+		where += ` AND EXISTS(SELECT 1 FROM note_tags nt JOIN tags t ON t.id=nt.tag_id WHERE nt.note_id=notes.id AND t.normalized_name IN (` + strings.TrimRight(strings.Repeat("?,", len(tags)), ",") + `))`
+		for _, v := range tags {
+			args = append(args, strings.ToLower(v))
+		}
 	}
 	var total int
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM notes WHERE `+where, args...).Scan(&total); err != nil {
@@ -230,13 +337,13 @@ func ListNotes(ctx context.Context, db *sql.DB, userID int64, query, searchIn, s
 	if err != nil {
 		return NoteList{}, err
 	}
-	defer rows.Close()
 	result := NoteList{Notes: []Note{}, Total: total}
 	for rows.Next() {
 		var note Note
 		if err := scanNote(rows, &note); err != nil {
 			return NoteList{}, err
 		}
+
 		if query != "" {
 			if searchIn != "content" {
 				note.TitleMatches = matchRanges(note.Title, query)
@@ -247,7 +354,36 @@ func ListNotes(ctx context.Context, db *sql.DB, userID int64, query, searchIn, s
 		}
 		result.Notes = append(result.Notes, note)
 	}
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return NoteList{}, err
+	}
+	if err := rows.Close(); err != nil {
+		return NoteList{}, err
+	}
+	for i := range result.Notes {
+		if err := loadNoteTags(ctx, db, &result.Notes[i]); err != nil {
+			return NoteList{}, err
+		}
+	}
+	return result, nil
+}
+
+func ListTags(ctx context.Context, db *sql.DB, userID int64) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `SELECT DISTINCT t.display_name,t.normalized_name FROM tags t JOIN note_tags nt ON nt.tag_id=t.id JOIN notes n ON n.id=nt.note_id WHERE n.user_id=? ORDER BY t.normalized_name`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var display, normalized string
+		if err := rows.Scan(&display, &normalized); err != nil {
+			return nil, err
+		}
+		out = append(out, display)
+	}
+	return out, rows.Err()
 }
 
 func escapeLike(value string) string {

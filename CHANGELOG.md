@@ -1,0 +1,9 @@
+# Changelog
+
+## 2026-10-06
+
+- Use incoming Instagram and Facebook messages as note titles and store shared URLs before message text.
+- Parse hashtags into tags and reanalyze tags whenever notes are created or updated.
+- Add title/body search with multi-source and multi-tag filters.
+- Require an explicit **Load post** action before resolving social media details.
+- Add note multi-selection, confirmed bulk deletion, and combined Markdown download.

@@ -95,7 +95,7 @@ func TestFacebookWebhookStoresOrderedFallbackAttachmentsWithText(t *testing.T) {
 	if err := db.QueryRow(`SELECT content_markdown, facebook_attachments_json FROM notes WHERE external_message_id='text-with-media'`).Scan(&content, &attachments); err != nil {
 		t.Fatal(err)
 	}
-	if content != "keep this text" || attachments != `[{"type":"fallback","url":"https://www.facebook.com/share/p/first","lookup_status":"unavailable"},{"type":"fallback","url":"https://www.facebook.com/share/p/second","lookup_status":"unavailable"}]` {
+	if content != "https://www.facebook.com/share/p/first\nkeep this text" || attachments != `[{"type":"fallback","url":"https://www.facebook.com/share/p/first","lookup_status":"unavailable"},{"type":"fallback","url":"https://www.facebook.com/share/p/second","lookup_status":"unavailable"}]` {
 		t.Fatalf("note content=%q attachments=%s", content, attachments)
 	}
 }

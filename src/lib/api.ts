@@ -17,8 +17,9 @@ export type Note = {
 	sections?: NoteSearchSection[];
 	instagram_attachments: InstagramAttachment[];
 	facebook_attachments: FacebookAttachment[];
+	tags: string[];
 };
-export type NotesPage = { notes: Note[]; total: number; page: number; page_size: number };
+export type NotesPage = { notes: Note[]; total: number; page: number; page_size: number; tags?: string[] };
 export type FacebookMessage = { external_message_id: string; sender_id: string; page_id: string; text: string; status: string; note_id: number | null; received_at: string };
 export type SocialPlatform = { id: string; name: string; available: boolean; search_enabled: boolean; inbox?: { instagram_user_id?: string; username?: string; page_id?: string } };
 export type SocialAccountMatch = { id: string; username: string; name: string; profile_picture_url: string };
@@ -108,12 +109,14 @@ export function createApiClient(fetcher: Fetch = fetch, cookies = () => typeof d
 		login: (input: { email: string; password: string }) => request<{ user: User; csrf_token: string }>('/api/auth/login', { method: 'POST', body: JSON.stringify(input) }),
 		logout: () => request<void>('/api/auth/logout', { method: 'POST' }),
 		profile: async () => (await request<{ user: User }>('/api/profile')).user,
-		listNotes: ({ query = '', searchIn = 'all', source = '', sort = 'updated_at', order = 'desc', page = 1, pageSize = 20 } = {}) => {
+		listNotes: ({ query = '', searchIn = 'all', sources = [] as string[], tags = [] as string[], sort = 'updated_at', order = 'desc', page = 1, pageSize = 20 } = {}) => {
 			const params = new URLSearchParams({ sort, order, page: String(page), page_size: String(pageSize) });
 			if (query) { params.set('q', query); params.set('search_in', searchIn); }
-			if (source) params.set('source', source);
+			sources.forEach((source) => params.append('source', source));
+			tags.forEach((tag) => params.append('tag', tag));
 			return request<NotesPage>(`/api/notes?${params}`);
 		},
+		tags: async () => (await request<{ tags: string[] }>('/api/tags')).tags,
 		facebookMessages: async () => (await request<{ messages: FacebookMessage[] }>('/api/facebook-messages')).messages,
 		getNote: (id: number) => request<Note>(`/api/notes/${id}`),
 		resolveInstagramMedia: (id: number) => request<{ media: InstagramCachedMedia[]; attachments: InstagramAttachment[] }>(`/api/notes/${id}/instagram-media/resolve`, { method: 'POST' }),
