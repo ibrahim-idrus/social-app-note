@@ -8,3 +8,4 @@
 - Require an explicit **Load post** action before resolving social media details.
 - Add note multi-selection, confirmed bulk deletion, and combined Markdown download.
 - Backfill tags for existing notes, bound repeated filters, and hide post loading for unsupported URLs.
+- Move selected-note actions into an accessible dropdown menu.

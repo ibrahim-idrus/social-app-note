@@ -6,9 +6,10 @@
 	import { formatDate } from '$lib/app-utils';
 	import { notesToMarkdown } from '$lib/note-export';
 	import SearchHighlightedText from '$lib/components/SearchHighlightedText.svelte';
-	import { Button } from '$lib/components/ui/button';
+	import { Button, buttonVariants } from '$lib/components/ui/button';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { Input } from '$lib/components/ui/input';
-	import { AlertCircle, ChevronLeft, ChevronRight, FileX2, LoaderCircle, MessageCircle, Plus, Search } from '@lucide/svelte';
+	import { AlertCircle, ChevronDown, ChevronLeft, ChevronRight, Download, FileX2, LoaderCircle, MessageCircle, Plus, Search, Trash2 } from '@lucide/svelte';
 	import { onMount } from 'svelte';
 
 	const sourceOptions = [['manual','Manual'],['instagram','Instagram'],['facebook','Facebook Messenger']] as const;
@@ -37,7 +38,7 @@
 		<select class="select" aria-label="Sort notes" bind:value={sort} onchange={()=>commit(false)}>{#if query}<option value="relevance">Relevance</option>{/if}<option value="updated_at">Recently updated</option><option value="created_at">Recently created</option><option value="title">Title</option></select>
 	</form>
 	{#if sources.length||tags.length}<div class="active-filters">{#each sources as source}<button onclick={()=>{sources=sources.filter((v)=>v!==source);commit()}}>Source: {source} ×</button>{/each}{#each tags as tag}<button onclick={()=>{tags=tags.filter((v)=>v!==tag);commit()}}>#{tag} ×</button>{/each}</div>{/if}
-	{#if selected.size}<div class="bulk-bar"><strong>{selected.size} selected</strong><Button variant="outline" onclick={download}>Download as Markdown</Button><Button variant="destructive" onclick={removeSelected}>Delete</Button></div>{/if}
+	{#if selected.size}<div class="bulk-bar"><strong>{selected.size} selected</strong><DropdownMenu.Root><DropdownMenu.Trigger class={buttonVariants({variant:'outline'})}>Actions <ChevronDown/></DropdownMenu.Trigger><DropdownMenu.Content align="end"><DropdownMenu.Item onclick={download}><Download/>Download as Markdown</DropdownMenu.Item><DropdownMenu.Item variant="destructive" onclick={removeSelected}><Trash2/>Delete</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Root></div>{/if}
 	{#if actionError}<p class="field-error" role="alert">{actionError}</p>{/if}
 	<section class="panel" aria-live="polite">
 		{#if loading}<div class="state-box"><div><LoaderCircle class="spinner" size={28}/><h2>Loading notes</h2></div></div>

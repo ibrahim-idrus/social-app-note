@@ -27,6 +27,9 @@ test('offers row and all-visible selection, combined export, and confirmed seque
 	assert.match(source, /confirm\(`Delete \$\{selected\.size\} selected note/);
 	assert.match(source, /for \(const id of \[\.\.\.selected\]\)/);
 	assert.match(source, /selected = new Set\(failed\)/);
+	assert.match(source, /<DropdownMenu\.Trigger[^>]*>Actions/);
+	assert.match(source, /<DropdownMenu\.Item onclick=\{download\}>/);
+	assert.match(source, /<DropdownMenu\.Item variant="destructive" onclick=\{removeSelected\}>/);
 });
 
 test('shows note tags and accessible multi-value source and tag filters', () => {
