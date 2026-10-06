@@ -2,6 +2,7 @@
 
 ## 2026-10-06
 
+- Replace the split Markdown textarea and preview with a single Milkdown live editor while preserving Markdown storage.
 - Use incoming Instagram and Facebook messages as note titles and store shared URLs before message text.
 - Parse hashtags into tags and reanalyze tags whenever notes are created or updated.
 - Add title/body search with multi-source and multi-tag filters.

@@ -96,10 +96,13 @@ test('heading slugs are stable and duplicates receive suffixes', () => {
 	assert.match(renderMarkdown('# Same\n# Same'), /id="same"[^]*id="same-2"/);
 });
 
-test('editor initializes the bound textarea ref to the child fallback value', async () => {
+test('note editor uses Milkdown as one Markdown-backed editing surface', async () => {
 	const source = await (await import('node:fs/promises')).readFile('src/lib/components/NoteEditor.svelte', 'utf8');
-	assert.match(source, /let area = \$state<HTMLTextAreaElement \| null>\(null\)/);
-	assert.match(source, /bind:ref=\{area\}/);
+	assert.match(source, /from '@milkdown\/kit\/core'/);
+	assert.match(source, /from '@milkdown\/kit\/preset\/commonmark'/);
+	assert.match(source, /listenerCtx/);
+	assert.match(source, /getMarkdown/);
+	assert.doesNotMatch(source, /<Textarea|>Preview</);
 });
 
 test('internal navigation uses SvelteKit base-path resolution', async () => {
