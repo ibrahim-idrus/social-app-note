@@ -2,6 +2,7 @@
 
 ## 2026-10-07
 
+- Replace source and tag checkbox filters with searchable multi-select dropdowns.
 - Add bulk tag editing for selected notes, with independent append and remove operations.
 
 ## 2026-10-06

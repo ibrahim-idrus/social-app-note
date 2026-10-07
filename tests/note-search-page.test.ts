@@ -32,10 +32,17 @@ test('offers row and all-visible selection, combined export, and confirmed seque
 	assert.match(source, /<DropdownMenu\.Item variant="destructive" onclick=\{removeSelected\}>/);
 });
 
-test('shows note tags and accessible multi-value source and tag filters', () => {
-	assert.match(source, /fieldset class="filter-group"/);
-	assert.match(source, /note\.tags/);
+test('shows note tags and searchable multi-select source and tag filters', async () => {
+	assert.match(source, /<MultiSelect label="Sources"/);
+	assert.match(source, /<MultiSelect label="Tags"/);
+	assert.match(source, /onchange=\{\(values\)=>\{sources=values;commit\(\)\}\}/);
+	assert.match(source, /onchange=\{\(values\)=>\{tags=values;commit\(\)\}\}/);
 	assert.match(source, /class="tag-chip"/);
+
+	const multiSelect = await readFile('src/lib/components/MultiSelect.svelte', 'utf8');
+	assert.match(multiSelect, /type="search"/);
+	assert.match(multiSelect, /aria-multiselectable="true"/);
+	assert.match(multiSelect, /toLocaleLowerCase\(\)\.includes/);
 });
 
 test('loads the complete user tag list instead of deriving filters from one page', () => {

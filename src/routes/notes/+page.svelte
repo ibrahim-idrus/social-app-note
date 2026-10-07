@@ -6,6 +6,7 @@
 	import { formatDate } from '$lib/app-utils';
 	import { notesToMarkdown } from '$lib/note-export';
 	import SearchHighlightedText from '$lib/components/SearchHighlightedText.svelte';
+	import MultiSelect from '$lib/components/MultiSelect.svelte';
 	import { Button, buttonVariants } from '$lib/components/ui/button';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { Input } from '$lib/components/ui/input';
@@ -19,7 +20,7 @@
 	function readURL(){const p=route.url.searchParams;query=p.get('q')??'';searchIn=p.get('search_in')??'all';sources=p.getAll('source');tags=p.getAll('tag');sort=p.get('sort')??(query?'relevance':'updated_at');order=p.get('order')??'desc';page=Number(p.get('page'))||1;}
 	async function load(){const request=++requestID;loading=true;error='';try{const [result,allTags]=await Promise.all([api.listNotes({query,searchIn,sources,tags,sort,order,page,pageSize}),api.tags()]);if(request!==requestID)return;notes=result.notes.map((note)=>({...note,tags:note.tags??[]}));total=result.total;availableTags=allTags;selected=new Set([...selected].filter((id)=>notes.some((note)=>note.id===id)));}catch(cause){if(request!==requestID)return;error=cause instanceof Error?cause.message:'Notes could not load.';}finally{if(request===requestID)loading=false;}}
 	async function commit(reset=true){if(reset)page=1;if(!query&&sort==='relevance')sort='updated_at';const p=new URLSearchParams();if(query){p.set('q',query.trim());p.set('search_in',searchIn)}sources.forEach((value)=>p.append('source',value));tags.forEach((value)=>p.append('tag',value));if(sort!==(query?'relevance':'updated_at'))p.set('sort',sort);if(order!=='desc')p.set('order',order);if(page>1)p.set('page',String(page));await goto(`${resolve('/notes')}${p.size?'?'+p:''}`,{replaceState:false,noScroll:true,keepFocus:true});await load();}
-	function toggle(list:string[],value:string){return list.includes(value)?list.filter((item)=>item!==value):[...list,value]}
+
 	function toggleNote(id:number){const next=new Set(selected);next.has(id)?next.delete(id):next.add(id);selected=next;}
 	function toggleAll(){const next=new Set(selected);allVisible?notes.forEach((note)=>next.delete(note.id)):notes.forEach((note)=>next.add(note.id));selected=next;}
 	function clear(){query='';searchIn='all';sources=[];tags=[];sort='updated_at';order='desc';commit();}
@@ -35,8 +36,8 @@
 	<form class="toolbar" onsubmit={(e)=>{e.preventDefault();sort=query?'relevance':'updated_at';commit()}}>
 		<div class="search-wrap"><Search size={17}/><Input aria-label="Search notes" placeholder="Search title or content…" bind:value={query}/></div>
 		<select class="select" aria-label="Search in" bind:value={searchIn} onchange={()=>query&&commit()}><option value="all">Title and body</option><option value="title">Title</option><option value="content">Body</option></select><Button type="submit">Search</Button>
-		<fieldset class="filter-group"><legend>Sources</legend>{#each sourceOptions as option}<label><input type="checkbox" checked={sources.includes(option[0])} onchange={()=>{sources=toggle(sources,option[0]);commit()}}/>{option[1]}</label>{/each}</fieldset>
-		{#if availableTags.length}<fieldset class="filter-group"><legend>Tags</legend>{#each availableTags as tag}<label><input type="checkbox" checked={tags.includes(tag)} onchange={()=>{tags=toggle(tags,tag);commit()}}/>#{tag}</label>{/each}</fieldset>{/if}
+		<MultiSelect label="Sources" options={sourceOptions.map(([value,label])=>({value,label}))} value={sources} onchange={(values)=>{sources=values;commit()}}/>
+		{#if availableTags.length}<MultiSelect label="Tags" options={availableTags.map((tag)=>({value:tag,label:`#${tag}`}))} value={tags} onchange={(values)=>{tags=values;commit()}}/>{/if}
 		<select class="select" aria-label="Sort notes" bind:value={sort} onchange={()=>commit(false)}>{#if query}<option value="relevance">Relevance</option>{/if}<option value="updated_at">Recently updated</option><option value="created_at">Recently created</option><option value="title">Title</option></select>
 	</form>
 	{#if sources.length||tags.length}<div class="active-filters">{#each sources as source}<button onclick={()=>{sources=sources.filter((v)=>v!==source);commit()}}>Source: {source} ×</button>{/each}{#each tags as tag}<button onclick={()=>{tags=tags.filter((v)=>v!==tag);commit()}}>#{tag} ×</button>{/each}</div>{/if}
