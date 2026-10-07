@@ -2,6 +2,7 @@
 
 ## 2026-10-07
 
+- Fix root-domain API requests failing when the document base URL is relative.
 - Rename the product and project branding from NoteDesk/Social Notes to SocialNotes.
 
 - Replace source and tag checkbox filters with searchable multi-select dropdowns.

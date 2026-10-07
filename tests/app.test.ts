@@ -45,6 +45,26 @@ test('Instagram cached media uses the root API route from a note detail page', (
 	}
 });
 
+test('API requests use the page origin when the deployed document base is relative', async () => {
+	const previousDocument = globalThis.document;
+	const previousLocation = globalThis.location;
+	let request: Request | undefined;
+	Object.defineProperty(globalThis, 'document', { configurable: true, value: { baseURI: '/' } });
+	Object.defineProperty(globalThis, 'location', { configurable: true, value: { origin: 'https://dev-socialnotes.ahsanworks.com' } });
+	try {
+		const api = createApiClient(async (input, init) => {
+			request = new Request(input, init);
+			return Response.json({ notes: [], total: 0, page: 1, page_size: 20 });
+		});
+		await api.listNotes();
+		assert.equal(new URL(request!.url).origin, 'https://dev-socialnotes.ahsanworks.com');
+		assert.equal(new URL(request!.url).pathname, '/api/notes');
+	} finally {
+		Object.defineProperty(globalThis, 'document', { configurable: true, value: previousDocument });
+		Object.defineProperty(globalThis, 'location', { configurable: true, value: previousLocation });
+	}
+});
+
 test('mutations send JSON and the CSRF cookie to the same-origin API', async () => {
 	let request: Request | undefined;
 	const api = createApiClient(async (input, init) => {
@@ -116,8 +136,8 @@ test('internal navigation uses SvelteKit base-path resolution', async () => {
 	assert.match(config, /fallback: 'index\.html'/);
 	assert.match(config, /base: process\.env\.BASE_PATH \?\? ''/);
 	const apiSource = await readFile('src/lib/api.ts', 'utf8');
-	assert.match(apiSource, /document\.baseURI/);
-	assert.match(apiSource, /new URL\(`\.\$\{path\}`/);
+	assert.match(apiSource, /location\.origin/);
+	assert.match(apiSource, /new URL\(path, base\)/);
 	assert.match(source, /<base href=\{`\$\{base\}\/`\}/);
 });
 
