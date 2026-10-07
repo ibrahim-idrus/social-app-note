@@ -284,6 +284,38 @@ func DeleteNote(ctx context.Context, db *sql.DB, userID, id int64) error {
 	return nil
 }
 
+func BulkEditNoteTags(ctx context.Context, db *sql.DB, userID int64, noteIDs []int64, add, remove []string) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, id := range noteIDs {
+		var owned int
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM notes WHERE id=? AND user_id=?`, id, userID).Scan(&owned); err != nil {
+			return err
+		}
+		if owned == 0 {
+			continue
+		}
+		for _, tag := range remove {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM note_tags WHERE note_id=? AND tag_id IN (SELECT id FROM tags WHERE normalized_name=?)`, id, strings.ToLower(tag)); err != nil {
+				return err
+			}
+		}
+		for _, tag := range add {
+			normalized := strings.ToLower(tag)
+			if _, err := tx.ExecContext(ctx, `INSERT INTO tags(normalized_name,display_name) VALUES(?,?) ON CONFLICT(normalized_name) DO NOTHING`, normalized, tag); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO note_tags(note_id,tag_id) SELECT ?,id FROM tags WHERE normalized_name=?`, id, normalized); err != nil {
+				return err
+			}
+		}
+	}
+	return tx.Commit()
+}
+
 func ListNotes(ctx context.Context, db *sql.DB, userID int64, query, searchIn, source, sortField, order string, page, pageSize int) (NoteList, error) {
 	var sources []string
 	if source != "" {

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-07
+
+- Add bulk tag editing for selected notes, with independent append and remove operations.
+
 ## 2026-10-06
 
 - Break long note titles, body text, dashboard rows, and search excerpts instead of allowing horizontal page overflow.

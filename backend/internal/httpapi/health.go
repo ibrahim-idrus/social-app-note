@@ -86,6 +86,7 @@ func Handler(db *sql.DB, options ...Options) http.Handler {
 	mux.HandleFunc("GET /api/tags", api.authenticated(api.listTags, false))
 	mux.HandleFunc("GET /api/facebook-messages", api.authenticated(api.listFacebookMessages, false))
 	mux.HandleFunc("POST /api/notes", api.authenticated(api.createNote, true))
+	mux.HandleFunc("PATCH /api/notes/tags", api.authenticated(api.bulkEditNoteTags, true))
 	mux.HandleFunc("GET /api/notes/{id}", api.authenticated(api.getNote, false))
 	mux.HandleFunc("POST /api/notes/{id}/instagram-media/resolve", api.authenticated(api.resolveInstagramMedia, true))
 	mux.HandleFunc("GET /api/notes/{id}/instagram-media/{key}", api.authenticated(api.readInstagramMedia, false))

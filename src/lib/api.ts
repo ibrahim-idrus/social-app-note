@@ -124,6 +124,7 @@ export function createApiClient(fetcher: Fetch = fetch, cookies = () => typeof d
 		createNote: (input: { title: string; content: string }) => request<Note>('/api/notes', { method: 'POST', body: JSON.stringify({ title: input.title, content_markdown: input.content }) }),
 		updateNote: (id: number, input: { title: string; content: string }) => request<Note>(`/api/notes/${id}`, { method: 'PUT', body: JSON.stringify({ title: input.title, content_markdown: input.content }) }),
 		deleteNote: (id: number) => request<void>(`/api/notes/${id}`, { method: 'DELETE' }),
+		bulkEditTags: (noteIDs: number[], add: string[], remove: string[]) => request<void>('/api/notes/tags', { method: 'PATCH', body: JSON.stringify({ note_ids: noteIDs, add, remove }) }),
 		platforms: async () => (await request<{ platforms: SocialPlatform[] }>('/api/social-platforms')).platforms,
 		identities: async () => (await request<{ identities: SocialIdentity[] }>('/api/social-identities')).identities,
 		createSocialIdentity: (platform: string, username = '') => request<SocialRegistration>('/api/social-identities', { method: 'POST', body: JSON.stringify({ platform, username }) }),

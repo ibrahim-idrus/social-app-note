@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/mail"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,6 +31,7 @@ const (
 )
 
 var dummyPasswordHash = []byte("$2a$10$7EqJtq98hPqEX7fNZaFWoO5JQ9jM.VgQ6mC4McT8yXQ7x1E2Vt8tK")
+var tagNameRE = regexp.MustCompile(`^[\pL\pN_]+$`)
 
 type API struct {
 	db                                                              *sql.DB
@@ -253,6 +255,45 @@ func (api *API) deleteNote(w http.ResponseWriter, r *http.Request, auth authenti
 		return
 	}
 	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (api *API) bulkEditNoteTags(w http.ResponseWriter, r *http.Request, auth authentication) {
+	var input struct {
+		NoteIDs []int64  `json:"note_ids"`
+		Add     []string `json:"add"`
+		Remove  []string `json:"remove"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if len(input.NoteIDs) == 0 || len(input.NoteIDs) > 100 || len(input.Add)+len(input.Remove) == 0 || len(input.Add)+len(input.Remove) > 50 {
+		writeError(w, http.StatusBadRequest, "invalid_input")
+		return
+	}
+	valid := func(tags []string) bool {
+		for _, tag := range tags {
+			tag = strings.TrimSpace(strings.TrimPrefix(tag, "#"))
+			if tag == "" || len([]rune(tag)) > 50 || !tagNameRE.MatchString(tag) {
+				return false
+			}
+		}
+		return true
+	}
+	if !valid(input.Add) || !valid(input.Remove) {
+		writeError(w, http.StatusBadRequest, "invalid_input")
+		return
+	}
+	for i := range input.Add {
+		input.Add[i] = strings.TrimSpace(strings.TrimPrefix(input.Add[i], "#"))
+	}
+	for i := range input.Remove {
+		input.Remove[i] = strings.TrimSpace(strings.TrimPrefix(input.Remove[i], "#"))
+	}
+	if err := store.BulkEditNoteTags(r.Context(), api.db, auth.ID, input.NoteIDs, input.Add, input.Remove); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error")
 		return
 	}
