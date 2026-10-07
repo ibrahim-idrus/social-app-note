@@ -24,22 +24,22 @@
 	}
 </script>
 
-<svelte:head><title>Sign in · NoteDesk</title></svelte:head>
+<svelte:head><title>Sign in · SocialNotes</title></svelte:head>
 <div class="auth-page">
 	<section class="auth-side">
-		<a class="brand" href={resolve('/login')}><span class="brand-mark"><BookOpenText size={18} /></span>NoteDesk</a>
+		<a class="brand" href={resolve('/login')}><span class="brand-mark"><BookOpenText size={18} /></span>SocialNotes</a>
 		<div class="auth-quote"><p>Keep the useful things you find, without breaking your flow.</p><small>Manual notes and Instagram or Facebook Messenger social inboxes, in one quiet workspace.</small></div>
 		<small>Your notes stay in your private workspace.</small>
 	</section>
 	<main class="auth-main">
 		<div class="auth-card">
-			<span class="eyebrow">Welcome back</span><h1>Sign in to your workspace</h1><p class="subtle">Enter the credentials for your NoteDesk account.</p>
+			<span class="eyebrow">Welcome back</span><h1>Sign in to your workspace</h1><p class="subtle">Enter the credentials for your SocialNotes account.</p>
 			<form onsubmit={submit} novalidate>
 				<div class="field"><Label for="email">Email</Label><Input id="email" type="email" autocomplete="email" bind:value={email} aria-invalid={!!error} /></div>
 				<div class="field"><Label for="password">Password</Label><div class="password-wrap"><Input id="password" type={show ? 'text' : 'password'} autocomplete="current-password" bind:value={password} aria-invalid={!!error} /><Button type="button" variant="ghost" size="icon" aria-label={show ? 'Hide password' : 'Show password'} onclick={() => show = !show}>{#if show}<EyeOff />{:else}<Eye />{/if}</Button></div>{#if error}<span class="field-error" role="alert">{error}</span>{/if}</div>
 				<Button type="submit" size="lg" disabled={loading}>{loading ? 'Signing in…' : 'Sign in'}</Button>
 			</form>
-			<p class="auth-footer">New to NoteDesk? <a href={resolve('/register')}>Create an account</a></p>
+			<p class="auth-footer">New to SocialNotes? <a href={resolve('/register')}>Create an account</a></p>
 		</div>
 	</main>
 </div>

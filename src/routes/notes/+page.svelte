@@ -30,7 +30,7 @@
 	async function saveTags(){const add=parseTags(addTags),remove=parseTags(removeTags);if(!add.length&&!remove.length){actionError='Enter at least one tag to add or remove.';return}savingTags=true;actionError='';try{await api.bulkEditTags([...selected],add,remove);editingTags=false;addTags='';removeTags='';await load();}catch(cause){actionError=cause instanceof Error?cause.message:'Tags could not be updated.'}finally{savingTags=false}}
 	onMount(()=>{readURL();load();const back=()=>{readURL();load()};addEventListener('popstate',back);return()=>removeEventListener('popstate',back)});
 </script>
-<svelte:head><title>Notes · NoteDesk</title></svelte:head>
+<svelte:head><title>Notes · SocialNotes</title></svelte:head>
 <div class="page">
 	<header class="page-header"><div><span class="eyebrow">Library</span><h1>Notes</h1><p class="subtle">Search and review everything you’ve saved.</p></div><Button href={resolve('/notes/new')}><Plus/>New note</Button></header>
 	<form class="toolbar" onsubmit={(e)=>{e.preventDefault();sort=query?'relevance':'updated_at';commit()}}>

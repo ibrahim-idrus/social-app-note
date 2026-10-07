@@ -20,9 +20,9 @@
 	}
 </script>
 
-<svelte:head><title>Create account · NoteDesk</title></svelte:head>
+<svelte:head><title>Create account · SocialNotes</title></svelte:head>
 <div class="auth-page">
-	<section class="auth-side"><a class="brand" href={resolve('/register')}><span class="brand-mark"><BookOpenText size={18} /></span>NoteDesk</a><div class="auth-quote"><p>Your notes should feel like a workbench, not another feed.</p><small>Capture ideas manually or send text through Instagram or Facebook Messenger.</small></div><small>No social account connection required</small></section>
+	<section class="auth-side"><a class="brand" href={resolve('/register')}><span class="brand-mark"><BookOpenText size={18} /></span>SocialNotes</a><div class="auth-quote"><p>Your notes should feel like a workbench, not another feed.</p><small>Capture ideas manually or send text through Instagram or Facebook Messenger.</small></div><small>No social account connection required</small></section>
 	<main class="auth-main"><div class="auth-card"><span class="eyebrow">Get started</span><h1>Create your workspace</h1><p class="subtle">Create an account to start saving notes.</p>
 		<form onsubmit={submit} novalidate>
 			<div class="field"><Label for="name">Name</Label><Input id="name" autocomplete="name" bind:value={name} /></div>

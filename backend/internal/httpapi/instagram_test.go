@@ -305,7 +305,7 @@ func TestInstagramVerificationSendsOneSanitizedSuccessReply(t *testing.T) {
 	if err := json.Unmarshal(bodies[0], &payload); err != nil {
 		t.Fatal(err)
 	}
-	if payload.Recipient.ID != "sender-1" || !strings.Contains(payload.Message.Text, "NoteDesk") || !strings.Contains(payload.Message.Text, "@alice") || strings.Contains(payload.Message.Text, "alice@example.com") {
+	if payload.Recipient.ID != "sender-1" || !strings.Contains(payload.Message.Text, "SocialNotes") || !strings.Contains(payload.Message.Text, "@alice") || strings.Contains(payload.Message.Text, "alice@example.com") {
 		t.Fatalf("reply payload = %#v", payload)
 	}
 	var notes int

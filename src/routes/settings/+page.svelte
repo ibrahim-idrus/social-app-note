@@ -93,7 +93,7 @@
 	}
 	onMount(() => { void load(); clockTimer = setInterval(() => now = Date.now(), 1000); return stopPolling; });
 </script>
-<svelte:head><title>Settings · NoteDesk</title></svelte:head>
+<svelte:head><title>Settings · SocialNotes</title></svelte:head>
 <div class="page page-narrow">
 	<header class="page-header">
 		<div><span class="eyebrow">Workspace</span><h1>Settings</h1><p class="subtle">Manage your profile and social capture accounts.</p></div>
@@ -134,9 +134,9 @@
 							{/if}
 						{:else if waitingFor.has(identity.id)}
 							{#if identity.platform === 'facebook'}
-								<div class="notice" role="status"><strong>Waiting for Facebook Messenger verification…</strong><p>Keep this page open while NoteDesk checks the connection.</p></div>
+								<div class="notice" role="status"><strong>Waiting for Facebook Messenger verification…</strong><p>Keep this page open while SocialNotes checks the connection.</p></div>
 							{:else}
-								<div class="notice" role="status"><strong>Waiting for Instagram verification…</strong><p>Keep this page open while NoteDesk checks the connection.</p></div>
+								<div class="notice" role="status"><strong>Waiting for Instagram verification…</strong><p>Keep this page open while SocialNotes checks the connection.</p></div>
 							{/if}
 						{:else if identity.status === 'pending'}
 							<div class="notice verification-instructions">

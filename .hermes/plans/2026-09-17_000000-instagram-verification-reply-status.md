@@ -33,7 +33,7 @@ Verified against Meta documentation on 2026-09-17:
 
 - Messaging overview: https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/messaging-api
 - Send API host and operation: `POST https://graph.instagram.com/v26.0/{IG_ID}/messages`
-- Authentication: `Authorization: Bearer <Instagram User access token>`
+- Authentication: `Authorization: Bearer *** User access token>`
 - Text payload: `{"recipient":{"id":"<IGSID>"},"message":{"text":"<TEXT>"}}`
 - Required permissions documented for this topology: `instagram_business_basic` and `instagram_business_manage_messages`.
 - The recipient must have initiated messaging with the professional Instagram account; this verification DM satisfies that prerequisite.
@@ -97,7 +97,7 @@ Use the existing injected `http.Client`. Add one focused helper that:
 - posts to `https://graph.instagram.com/v26.0/{dedicated_IG_ID}/messages`,
 - supplies the Instagram User token as a bearer token,
 - JSON-encodes `recipient.id` and `message.text`,
-- uses the configured product name if one exists, otherwise the established `NoteDesk` name,
+- uses the configured product name if one exists, otherwise the established `SocialNotes` name,
 - mentions `@<username>` but never the user's email,
 - bounds request time and response-body reads,
 - converts all failures to sanitized internal outcomes.

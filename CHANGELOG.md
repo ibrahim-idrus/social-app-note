@@ -2,6 +2,8 @@
 
 ## 2026-10-07
 
+- Rename the product and project branding from NoteDesk/Social Notes to SocialNotes.
+
 - Replace source and tag checkbox filters with searchable multi-select dropdowns.
 - Add bulk tag editing for selected notes, with independent append and remove operations.
 

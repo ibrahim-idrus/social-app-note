@@ -10,7 +10,7 @@
 	let manual = $derived(notes.filter((note) => note.source === 'manual').length); let instagram = $derived(notes.filter((note) => note.source === 'instagram').length); let facebook = $derived(notes.filter((note) => note.source === 'facebook').length);
 	onMount(async () => { try { const [result, connected] = await Promise.all([api.listNotes({ pageSize: 100 }), api.identities()]); notes = result.notes; identities = connected; } catch (cause) { error = cause instanceof Error ? cause.message : 'Dashboard could not load.'; } });
 </script>
-<svelte:head><title>Dashboard · NoteDesk</title></svelte:head>
+<svelte:head><title>Dashboard · SocialNotes</title></svelte:head>
 <div class="page">
 <header class="page-header"><div><span class="eyebrow">Workspace</span><h1>Hello, {appState.user?.name.split(' ')[0]}</h1><p class="subtle">A quick view of what you’ve captured lately.</p></div><Button href={resolve('/notes/new')}><Plus />Create note</Button></header>
 {#if error}<div class="notice error" role="alert">{error}</div>{/if}

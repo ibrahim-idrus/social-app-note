@@ -45,7 +45,7 @@ func Handler(db *sql.DB, options ...Options) http.Handler {
 		option.InstagramGraphVersion = "v26.0"
 	}
 	if option.ProductName == "" {
-		option.ProductName = "NoteDesk"
+		option.ProductName = "SocialNotes"
 	}
 	if option.FacebookGraphVersion == "" {
 		option.FacebookGraphVersion = "v26.0"

@@ -1,4 +1,4 @@
-# Social Notes
+# SocialNotes
 
 The existing SvelteKit UI is paired with a local-only Go API. Phase 0 provides the API skeleton, SQLite migrations, strict configuration validation, and health checking. Instagram integration is disabled until the real Meta feasibility spike establishes its contract.
 

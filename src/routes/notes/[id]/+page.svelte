@@ -25,7 +25,7 @@
 	onMount(load);
 </script>
 
-<svelte:head><title>{note?.title ?? 'Note not found'} · NoteDesk</title></svelte:head>
+<svelte:head><title>{note?.title ?? 'Note not found'} · SocialNotes</title></svelte:head>
 <div class="page page-narrow">
 	<a class="source" href={resolve('/notes')}><ArrowLeft size={14} />Back to notes</a>
 	{#if loading}<section class="panel state-box" aria-live="polite"><div><p>Loading note…</p></div></section>

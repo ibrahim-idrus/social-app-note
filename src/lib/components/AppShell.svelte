@@ -37,12 +37,12 @@
 {:else if appState.user}
 <div class="app-frame">
 	<header class="mobile-bar">
-		<a class="brand" href={resolve('/dashboard')}><span class="brand-mark"><BookOpenText size={18} /></span>NoteDesk</a>
+		<a class="brand" href={resolve('/dashboard')}><span class="brand-mark"><BookOpenText size={18} /></span>SocialNotes</a>
 		<Button variant="ghost" size="icon" aria-label={open ? 'Close navigation' : 'Open navigation'} onclick={() => open = !open}>{#if open}<X />{:else}<Menu />{/if}</Button>
 	</header>
 	{#if open}<button class="nav-scrim" aria-label="Close navigation" onclick={() => open = false}></button>{/if}
 	<aside class:open class="sidebar">
-		<a class="brand desktop-brand" href={resolve('/dashboard')}><span class="brand-mark"><BookOpenText size={18} /></span>NoteDesk</a>
+		<a class="brand desktop-brand" href={resolve('/dashboard')}><span class="brand-mark"><BookOpenText size={18} /></span>SocialNotes</a>
 		<nav aria-label="Main navigation">
 			{#each links as item}
 				<a href={item.href} class:active={page.url.pathname.startsWith(item.href)} onclick={() => open = false}><item.icon size={18} />{item.label}</a>
