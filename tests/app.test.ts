@@ -125,7 +125,7 @@ test('note editor uses Milkdown as one Markdown-backed editing surface', async (
 	assert.doesNotMatch(source, /<Textarea|>Preview</);
 });
 
-test('internal navigation uses SvelteKit base-path resolution', async () => {
+test('internal navigation uses SvelteKit base-path resolution without an HTML base override', async () => {
 	const { readFile } = await import('node:fs/promises');
 	const { glob } = await import('node:fs/promises');
 	const sources = await Array.fromAsync(glob('src/**/*.svelte'), (file) => readFile(file, 'utf8'));
@@ -138,7 +138,7 @@ test('internal navigation uses SvelteKit base-path resolution', async () => {
 	const apiSource = await readFile('src/lib/api.ts', 'utf8');
 	assert.match(apiSource, /location\.origin/);
 	assert.match(apiSource, /new URL\(path, base\)/);
-	assert.match(source, /<base href=\{`\$\{base\}\/`\}/);
+	assert.doesNotMatch(source, /<base\b/);
 });
 
 test('social capture uses an add-platform flow and hides occupied platforms', async () => {

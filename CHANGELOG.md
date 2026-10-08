@@ -2,6 +2,7 @@
 
 ## 2026-10-07
 
+- Remove the rewritten HTML base tag that caused blank pages on the root-mounted domain.
 - Fix root-domain API requests failing when the document base URL is relative.
 - Rename the product and project branding from NoteDesk/Social Notes to SocialNotes.
 
