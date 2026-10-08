@@ -14,7 +14,7 @@
 		error = name.trim().length < 2 ? 'Enter your name.' : !/^\S+@\S+\.\S+$/.test(email) ? 'Enter a valid email address.' : password.length < 8 ? 'Use at least 8 characters for your password.' : password !== confirm ? 'Passwords do not match.' : '';
 		if (error) return;
 		loading = true;
-		try { appState.user = (await api.register({ name: name.trim(), email: email.trim(), password })).user; await goto(resolve('/dashboard')); }
+		try { appState.user = (await api.register({ name: name.trim(), email: email.trim(), password })).user; await goto(resolve('/app/dashboard')); }
 		catch (cause) { error = cause instanceof Error ? cause.message : 'Account creation failed.'; }
 		finally { loading = false; }
 	}
@@ -22,7 +22,7 @@
 
 <svelte:head><title>Create account · SocialNotes</title></svelte:head>
 <div class="auth-page">
-	<section class="auth-side"><a class="brand" href={resolve('/register')}><span class="brand-mark"><BookOpenText size={18} /></span>SocialNotes</a><div class="auth-quote"><p>Your notes should feel like a workbench, not another feed.</p><small>Capture ideas manually or send text through Instagram or Facebook Messenger.</small></div><small>No social account connection required</small></section>
+	<section class="auth-side"><a class="brand" href={resolve('/app/register')}><span class="brand-mark"><BookOpenText size={18} /></span>SocialNotes</a><div class="auth-quote"><p>Your notes should feel like a workbench, not another feed.</p><small>Capture ideas manually or send text through Instagram or Facebook Messenger.</small></div><small>No social account connection required</small></section>
 	<main class="auth-main"><div class="auth-card"><span class="eyebrow">Get started</span><h1>Create your workspace</h1><p class="subtle">Create an account to start saving notes.</p>
 		<form onsubmit={submit} novalidate>
 			<div class="field"><Label for="name">Name</Label><Input id="name" autocomplete="name" bind:value={name} /></div>
@@ -30,5 +30,5 @@
 			<div class="field"><Label for="password">Password</Label><div class="password-wrap"><Input id="password" type={show ? 'text' : 'password'} autocomplete="new-password" bind:value={password} /><Button type="button" variant="ghost" size="icon" aria-label={show ? 'Hide password' : 'Show password'} onclick={() => show = !show}>{#if show}<EyeOff />{:else}<Eye />{/if}</Button></div><span class="field-help">At least 8 characters.</span></div>
 			<div class="field"><Label for="confirm">Confirm password</Label><Input id="confirm" type={show ? 'text' : 'password'} autocomplete="new-password" bind:value={confirm} />{#if error}<span class="field-error" role="alert">{error}</span>{/if}</div>
 			<Button type="submit" size="lg" disabled={loading}>{loading ? 'Creating account…' : 'Create account'}</Button>
-		</form><p class="auth-footer">Already have an account? <a href={resolve('/login')}>Sign in</a></p></div></main>
+		</form><p class="auth-footer">Already have an account? <a href={resolve('/app/login')}>Sign in</a></p></div></main>
 </div>

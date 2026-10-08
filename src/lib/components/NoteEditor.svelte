@@ -39,7 +39,7 @@
 		saving = true;
 		try {
 			const saved = note ? await api.updateNote(note.id, { title: title.trim(), content: content.trim() }) : await api.createNote({ title: title.trim(), content: content.trim() });
-			await goto(resolve('/notes/[id]', { id: String(saved.id) }));
+			await goto(resolve('/app/notes/[id]', { id: String(saved.id) }));
 		} catch (cause) { error = cause instanceof Error ? cause.message : 'The note could not be saved.'; }
 		finally { saving = false; }
 	}

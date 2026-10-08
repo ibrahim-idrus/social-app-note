@@ -18,7 +18,7 @@
 		error = !/^\S+@\S+\.\S+$/.test(email) ? 'Enter a valid email address.' : password.length < 6 ? 'Password must be at least 6 characters.' : '';
 		if (error) return;
 		loading = true;
-		try { appState.user = (await api.login({ email, password })).user; await goto(resolve('/dashboard')); }
+		try { appState.user = (await api.login({ email, password })).user; await goto(resolve('/app/dashboard')); }
 		catch (cause) { error = cause instanceof Error ? cause.message : 'Sign in failed.'; }
 		finally { loading = false; }
 	}
@@ -27,7 +27,7 @@
 <svelte:head><title>Sign in · SocialNotes</title></svelte:head>
 <div class="auth-page">
 	<section class="auth-side">
-		<a class="brand" href={resolve('/login')}><span class="brand-mark"><BookOpenText size={18} /></span>SocialNotes</a>
+		<a class="brand" href={resolve('/app/login')}><span class="brand-mark"><BookOpenText size={18} /></span>SocialNotes</a>
 		<div class="auth-quote"><p>Keep the useful things you find, without breaking your flow.</p><small>Manual notes and Instagram or Facebook Messenger social inboxes, in one quiet workspace.</small></div>
 		<small>Your notes stay in your private workspace.</small>
 	</section>
@@ -39,7 +39,7 @@
 				<div class="field"><Label for="password">Password</Label><div class="password-wrap"><Input id="password" type={show ? 'text' : 'password'} autocomplete="current-password" bind:value={password} aria-invalid={!!error} /><Button type="button" variant="ghost" size="icon" aria-label={show ? 'Hide password' : 'Show password'} onclick={() => show = !show}>{#if show}<EyeOff />{:else}<Eye />{/if}</Button></div>{#if error}<span class="field-error" role="alert">{error}</span>{/if}</div>
 				<Button type="submit" size="lg" disabled={loading}>{loading ? 'Signing in…' : 'Sign in'}</Button>
 			</form>
-			<p class="auth-footer">New to SocialNotes? <a href={resolve('/register')}>Create an account</a></p>
+			<p class="auth-footer">New to SocialNotes? <a href={resolve('/app/register')}>Create an account</a></p>
 		</div>
 	</main>
 </div>

@@ -4,10 +4,13 @@ import test from 'node:test';
 import { ApiError, createApiClient } from '../src/lib/api.ts';
 import { renderMarkdown, slugHeading } from '../src/lib/app-utils.ts';
 
-test('the app homepage opens the notes library', async () => {
-	const source = await (await import('node:fs/promises')).readFile('src/routes/+page.svelte', 'utf8');
-	assert.match(source, /resolve\('\/notes'\)/);
-	assert.doesNotMatch(source, /resolve\('\/dashboard'\)/);
+test('the root is a landing page and application routes live under /app', async () => {
+	const { readFile, glob } = await import('node:fs/promises');
+	const landing = await readFile('src/routes/+page.svelte', 'utf8');
+	assert.match(landing, /Your social feed, turned into a useful notebook/);
+	assert.match(landing, /resolve\('\/app\/register'\)/);
+	const sources = (await Array.fromAsync(glob('src/**/*.svelte'), (file) => readFile(file, 'utf8'))).join('\n');
+	assert.doesNotMatch(sources, /resolve\('\/(?:dashboard|login|register|notes|settings)/);
 });
 
 test('notes search, repeated source/tag filters, sorting, and pagination are sent to the backend', async () => {
@@ -26,7 +29,7 @@ test('notes search, repeated source/tag filters, sorting, and pagination are sen
 });
 
 test('note detail defers Instagram resolution until the user loads the post', async () => {
-	const source = await (await import('node:fs/promises')).readFile('src/routes/notes/[id]/+page.svelte', 'utf8');
+	const source = await (await import('node:fs/promises')).readFile('src/routes/app/notes/[id]/+page.svelte', 'utf8');
 	const initialLoad = source.match(/async function load\(\)[^]*?\n	}/)?.[0] ?? '';
 	assert.doesNotMatch(initialLoad, /resolveInstagramMedia/);
 	assert.match(source, /postLoading ?\? 'Loading…' : postError ?\? 'Retry loading post' : 'Load post'/);
@@ -142,7 +145,7 @@ test('internal navigation uses SvelteKit base-path resolution without an HTML ba
 });
 
 test('social capture uses an add-platform flow and hides occupied platforms', async () => {
-	const source = await (await import('node:fs/promises')).readFile('src/routes/settings/+page.svelte', 'utf8');
+	const source = await (await import('node:fs/promises')).readFile('src/routes/app/settings/+page.svelte', 'utf8');
 	assert.match(source, />Add platform: \{platform\.name\}</);
 	assert.match(source, /availablePlatforms/);
 	assert.match(source, /identities\.some\(\(identity\) => identity\.platform === platform\.id\)/);
@@ -158,7 +161,7 @@ test('Instagram sender registration posts a username without treating the inbox 
 });
 
 test('settings instructs users to verify from their own Instagram account', async () => {
-	const source = await (await import('node:fs/promises')).readFile('src/routes/settings/+page.svelte', 'utf8');
+	const source = await (await import('node:fs/promises')).readFile('src/routes/app/settings/+page.svelte', 'utf8');
 	assert.match(source, /Dedicated Instagram inbox/);
 	assert.match(source, /From your own @\{identity\.username\} account/);
 	assert.match(source, /Connect sender account/);
@@ -168,7 +171,7 @@ test('settings instructs users to verify from their own Instagram account', asyn
 });
 
 test('Instagram verification UI waits for backend state and cleans up bounded polling', async () => {
-	const source = await (await import('node:fs/promises')).readFile('src/routes/settings/+page.svelte', 'utf8');
+	const source = await (await import('node:fs/promises')).readFile('src/routes/app/settings/+page.svelte', 'utf8');
 	for (const state of ['waiting', 'active', 'invalid_code', 'expired', 'system_failure']) {
 		assert.match(source, new RegExp(`['"]${state}['"]`));
 	}
@@ -201,7 +204,7 @@ test('frontend contains no seeded, local-only, or simulated product state', asyn
 });
 
 test('Facebook Messenger settings use the configured Page and platform-specific verification states', async () => {
-	const source = await (await import('node:fs/promises')).readFile('src/routes/settings/+page.svelte', 'utf8');
+	const source = await (await import('node:fs/promises')).readFile('src/routes/app/settings/+page.svelte', 'utf8');
 	assert.match(source, /Facebook Messenger/);
 	assert.match(source, /facebook_page/);
 	assert.match(source, /page_id/);
@@ -218,8 +221,8 @@ test('Facebook Messenger settings use the configured Page and platform-specific 
 test('Facebook is a note source with a badge and filter while Threads is absent', async () => {
 	const { readFile } = await import('node:fs/promises');
 	const apiSource = await readFile('src/lib/api.ts', 'utf8');
-	const listSource = await readFile('src/routes/notes/+page.svelte', 'utf8');
-	const detailSource = await readFile('src/routes/notes/[id]/+page.svelte', 'utf8');
+	const listSource = await readFile('src/routes/app/notes/+page.svelte', 'utf8');
+	const detailSource = await readFile('src/routes/app/notes/[id]/+page.svelte', 'utf8');
 	assert.match(apiSource, /'manual' \| 'instagram' \| 'facebook'/);
 	assert.match(listSource, /\['facebook','Facebook Messenger'\]/);
 	assert.match(listSource, /note\.source==='facebook'/);
@@ -233,7 +236,7 @@ test('Facebook message history API remains authenticated but its table stays off
 	await client.facebookMessages();
 	assert.equal(request?.url, 'http://localhost/api/facebook-messages');
 	assert.equal(request?.credentials, 'same-origin');
-	const source = await (await import('node:fs/promises')).readFile('src/routes/notes/+page.svelte', 'utf8');
+	const source = await (await import('node:fs/promises')).readFile('src/routes/app/notes/+page.svelte', 'utf8');
 	assert.doesNotMatch(source, /Facebook messages|facebookMessages|api\.facebookMessages/);
 });
 
@@ -260,7 +263,7 @@ test('Instagram shared post and Reel links are copyable in note details', async 
 test('Facebook attachments render a native metadata card instead of an unreliable plugin iframe', async () => {
 	const { readFile } = await import('node:fs/promises');
 	const apiSource = await readFile('src/lib/api.ts', 'utf8');
-	const detailSource = await readFile('src/routes/notes/[id]/+page.svelte', 'utf8');
+	const detailSource = await readFile('src/routes/app/notes/[id]/+page.svelte', 'utf8');
 	const mediaSource = await readFile('src/lib/components/FacebookAttachments.svelte', 'utf8');
 	assert.match(apiSource, /FacebookAttachment/);
 	assert.match(apiSource, /facebook_attachments: FacebookAttachment\[\]/);

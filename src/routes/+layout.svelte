@@ -5,7 +5,7 @@
 	import { page } from '$app/state';
 
 	let { children } = $props();
-	let publicRoute = $derived(page.route.id === '/login' || page.route.id === '/register');
+	let publicRoute = $derived(page.route.id === '/' || page.route.id === '/app/login' || page.route.id === '/app/register');
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /><title>SocialNotes</title><meta name="description" content="Capture and organize notes manually or from Instagram and Facebook Messenger." /></svelte:head>

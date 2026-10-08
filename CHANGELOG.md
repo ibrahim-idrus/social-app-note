@@ -2,6 +2,7 @@
 
 ## 2026-10-08
 
+- Added a public landing page at `/` and moved all account and application screens under `/app`.
 - Added account-scoped recovery of uncaptured Instagram and Facebook messages with durable oldest-first processing and webhook queueing.
 
 ## 2026-10-07
