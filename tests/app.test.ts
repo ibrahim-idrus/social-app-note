@@ -82,6 +82,26 @@ test('mutations send JSON and the CSRF cookie to the same-origin API', async () 
 	assert.deepEqual(await request?.json(), { title: 'New', content_markdown: 'Body' });
 });
 
+test('note sharing posts an exact email and supports revocation', async () => {
+	const requests: Request[] = [];
+	const client = createApiClient(async (input, init) => { requests.push(new Request(input, init)); return requests.length === 1 ? Response.json({ user_id: 2, name: 'Bob', email: 'bob@example.com' }, { status: 201 }) : new Response(null, { status: 204 }); }, () => 'csrf_token=token');
+	await client.shareNote(7, 'bob@example.com');
+	await client.revokeNoteShare(7, 2);
+	assert.equal(requests[0].method, 'POST');
+	assert.deepEqual(await requests[0].json(), { email: 'bob@example.com' });
+	assert.equal(requests[1].method, 'DELETE');
+	assert.equal(new URL(requests[1].url).pathname, '/api/notes/7/shares/2');
+});
+
+test('note detail exposes sharing only to owners and shared notes are read-only', async () => {
+	const source = await (await import('node:fs/promises')).readFile('src/routes/app/notes/[id]/+page.svelte', 'utf8');
+	assert.match(source, /note\.can_edit/);
+	assert.match(source, /Share note/);
+	assert.match(source, /Shared by.*note\.owner_name/);
+	assert.match(source, /api\.shareNote/);
+	assert.match(source, /api\.revokeNoteShare/);
+});
+
 test('logout is sent without a CSRF dependency so a stale client token cannot keep the session alive', async () => {
 	let request: Request | undefined;
 	const api = createApiClient(async (input, init) => {

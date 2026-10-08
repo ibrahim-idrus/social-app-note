@@ -34,8 +34,8 @@ func TestOpenAppliesFoundationMigrationOnce(t *testing.T) {
 	if err := db.QueryRow(`SELECT count(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if count != 15 {
-		t.Fatalf("migration count = %d, want 15", count)
+	if count != 16 {
+		t.Fatalf("migration count = %d, want 16", count)
 	}
 }
 
@@ -87,6 +87,45 @@ func TestNoteTagsAreReanalyzedOnUpdate(t *testing.T) {
 	}
 	if strings.Join(note.Tags, "|") != "Work" {
 		t.Fatalf("updated tags=%#v", note.Tags)
+	}
+}
+
+func TestReadOnlyNoteSharing(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "sqlite.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err = db.Exec(`INSERT INTO users(id,name,email,password_hash) VALUES(1,'Alice','alice@example.com','x'),(2,'Bob','bob@example.com','x'),(3,'Eve','eve@example.com','x')`); err != nil {
+		t.Fatal(err)
+	}
+	note, err := CreateNote(context.Background(), db, 1, "Shared", "read only")
+	if err != nil {
+		t.Fatal(err)
+	}
+	share, err := ShareNote(context.Background(), db, 1, note.ID, "BOB@example.com")
+	if err != nil || share.UserID != 2 {
+		t.Fatalf("share=%#v err=%v", share, err)
+	}
+	shared, err := NoteByID(context.Background(), db, 2, note.ID)
+	if err != nil || shared.CanEdit || shared.OwnerName != "Alice" {
+		t.Fatalf("shared=%#v err=%v", shared, err)
+	}
+	listed, err := ListNotesFiltered(context.Background(), db, 2, "", "all", nil, nil, "updated_at", "desc", 1, 20)
+	if err != nil || listed.Total != 1 || listed.Notes[0].CanEdit {
+		t.Fatalf("listed=%#v err=%v", listed, err)
+	}
+	if _, err := UpdateNote(context.Background(), db, 2, note.ID, "Stolen", "no"); err != sql.ErrNoRows {
+		t.Fatalf("shared update err=%v", err)
+	}
+	if _, err := ShareNote(context.Background(), db, 2, note.ID, "eve@example.com"); err != sql.ErrNoRows {
+		t.Fatalf("reshare err=%v", err)
+	}
+	if err := RevokeNoteShare(context.Background(), db, 1, note.ID, 2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NoteByID(context.Background(), db, 2, note.ID); err != sql.ErrNoRows {
+		t.Fatalf("revoked read err=%v", err)
 	}
 }
 

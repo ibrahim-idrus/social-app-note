@@ -270,6 +270,44 @@ func TestManualNoteCRUDCSRFAndOwnership(t *testing.T) {
 	}
 }
 
+func TestOwnerCanShareAndRevokeReadOnlyNoteByExactEmail(t *testing.T) {
+	a := newTestClient(t, false)
+	a.register(t, "Alice", "alice@example.com")
+	created := a.request(t, http.MethodPost, "/api/notes", map[string]string{"title": "Shared", "content_markdown": "body"}, true)
+	var note map[string]any
+	_ = json.Unmarshal(created.Body.Bytes(), &note)
+	id := int(note["id"].(float64))
+	b := newTestClientWithHandler(t, a.handler)
+	b.register(t, "Bob", "bob@example.com")
+	if got := a.request(t, http.MethodPost, "/api/notes/"+itoa(id)+"/shares", map[string]string{"email": "BOB@example.com"}, false).Code; got != http.StatusForbidden {
+		t.Fatalf("share without csrf=%d", got)
+	}
+	shared := a.request(t, http.MethodPost, "/api/notes/"+itoa(id)+"/shares", map[string]string{"email": " BOB@example.com "}, true)
+	if shared.Code != http.StatusCreated || !strings.Contains(shared.Body.String(), `"email":"bob@example.com"`) {
+		t.Fatalf("share=%d %s", shared.Code, shared.Body.String())
+	}
+	read := b.request(t, http.MethodGet, "/api/notes/"+itoa(id), nil, false)
+	if read.Code != http.StatusOK || !strings.Contains(read.Body.String(), `"can_edit":false`) {
+		t.Fatalf("shared read=%d %s", read.Code, read.Body.String())
+	}
+	if got := b.request(t, http.MethodPut, "/api/notes/"+itoa(id), map[string]string{"title": "No", "content_markdown": "no"}, true).Code; got != http.StatusNotFound {
+		t.Fatalf("shared update=%d", got)
+	}
+	if got := b.request(t, http.MethodPost, "/api/notes/"+itoa(id)+"/shares", map[string]string{"email": "eve@example.com"}, true).Code; got != http.StatusNotFound {
+		t.Fatalf("reshare=%d", got)
+	}
+	missing := a.request(t, http.MethodPost, "/api/notes/"+itoa(id)+"/shares", map[string]string{"email": "missing@example.com"}, true)
+	if missing.Code != http.StatusNotFound || missing.Body.String() != "{\"error\":\"user_not_found\"}\n" {
+		t.Fatalf("missing=%d %s", missing.Code, missing.Body.String())
+	}
+	if got := a.request(t, http.MethodDelete, "/api/notes/"+itoa(id)+"/shares/2", nil, true).Code; got != http.StatusNoContent {
+		t.Fatalf("revoke=%d", got)
+	}
+	if got := b.request(t, http.MethodGet, "/api/notes/"+itoa(id), nil, false).Code; got != http.StatusNotFound {
+		t.Fatalf("read after revoke=%d", got)
+	}
+}
+
 func newTestClientWithHandler(t *testing.T, handler http.Handler) *testClient {
 	t.Helper()
 	return &testClient{handler: handler}

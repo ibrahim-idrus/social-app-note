@@ -5,7 +5,7 @@ import { notesToMarkdown } from '../src/lib/note-export.ts';
 const note = (id: number, title: string, tags: string[] = []) => ({
 	id, title, tags, content_markdown: `Body ${id}`, source: 'manual' as const,
 	created_at: '2026-10-01T10:00:00Z', updated_at: '2026-10-02T10:00:00Z',
-	social_identity_id: null, external_message_id: null, instagram_attachments: [], facebook_attachments: []
+	social_identity_id: null, external_message_id: null, instagram_attachments: [], facebook_attachments: [], can_edit: true, owner_name: 'Alice'
 });
 
 test('exports selected notes in visible order as one deterministic Markdown document', () => {

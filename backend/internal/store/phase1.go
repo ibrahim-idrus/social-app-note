@@ -38,6 +38,15 @@ type Note struct {
 	InstagramAttachments []InstagramAttachment `json:"instagram_attachments"`
 	FacebookAttachments  []FacebookAttachment  `json:"facebook_attachments"`
 	Tags                 []string              `json:"tags"`
+	CanEdit              bool                  `json:"can_edit"`
+	OwnerName            string                `json:"owner_name"`
+	Shares               []NoteShare           `json:"shares,omitempty"`
+}
+
+type NoteShare struct {
+	UserID int64  `json:"user_id"`
+	Name   string `json:"name"`
+	Email  string `json:"email"`
 }
 
 var hashtagRE = regexp.MustCompile(`#[\pL\pN_]+`)
@@ -121,7 +130,7 @@ type FacebookAttachment struct {
 
 func scanNote(s interface{ Scan(...any) error }, n *Note) error {
 	var instagramRaw, facebookRaw sql.NullString
-	if err := s.Scan(&n.ID, &n.UserID, &n.SocialIdentityID, &n.Title, &n.ContentMarkdown, &n.Source, &n.ExternalMessageID, &n.CreatedAt, &n.UpdatedAt, &instagramRaw, &facebookRaw); err != nil {
+	if err := s.Scan(&n.ID, &n.UserID, &n.SocialIdentityID, &n.Title, &n.ContentMarkdown, &n.Source, &n.ExternalMessageID, &n.CreatedAt, &n.UpdatedAt, &instagramRaw, &facebookRaw, &n.OwnerName, &n.CanEdit); err != nil {
 		return err
 	}
 	n.InstagramAttachments = []InstagramAttachment{}
@@ -217,13 +226,58 @@ func CreateNote(ctx context.Context, db *sql.DB, userID int64, title, content st
 func NoteByID(ctx context.Context, db *sql.DB, userID, id int64) (Note, error) {
 	var note Note
 	row := db.QueryRowContext(ctx, `
-		SELECT id, user_id, social_identity_id, title, content_markdown, source, external_message_id, created_at, updated_at, instagram_attachments_json, facebook_attachments_json
-		FROM notes WHERE id = ? AND user_id = ?`, id, userID)
+		SELECT n.id, n.user_id, n.social_identity_id, n.title, n.content_markdown, n.source, n.external_message_id, n.created_at, n.updated_at, n.instagram_attachments_json, n.facebook_attachments_json, u.name, n.user_id=?
+		FROM notes n JOIN users u ON u.id=n.user_id WHERE n.id=? AND (n.user_id=? OR EXISTS(SELECT 1 FROM note_shares s WHERE s.note_id=n.id AND s.user_id=?))`, userID, id, userID, userID)
 	err := scanNote(row, &note)
 	if err == nil {
 		err = loadNoteTags(ctx, db, &note)
 	}
+	if err == nil && note.CanEdit {
+		note.Shares, err = ListNoteShares(ctx, db, userID, id)
+	}
 	return note, err
+}
+
+func ListNoteShares(ctx context.Context, db *sql.DB, ownerID, noteID int64) ([]NoteShare, error) {
+	rows, err := db.QueryContext(ctx, `SELECT u.id,u.name,u.email FROM note_shares s JOIN users u ON u.id=s.user_id JOIN notes n ON n.id=s.note_id WHERE s.note_id=? AND n.user_id=? ORDER BY lower(u.email)`, noteID, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []NoteShare{}
+	for rows.Next() {
+		var s NoteShare
+		if err := rows.Scan(&s.UserID, &s.Name, &s.Email); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+func ShareNote(ctx context.Context, db *sql.DB, ownerID, noteID int64, email string) (NoteShare, error) {
+	var s NoteShare
+	err := db.QueryRowContext(ctx, `SELECT id,name,email FROM users WHERE email=lower(?) AND id<>? AND EXISTS(SELECT 1 FROM notes WHERE id=? AND user_id=?)`, strings.TrimSpace(email), ownerID, noteID, ownerID).Scan(&s.UserID, &s.Name, &s.Email)
+	if err != nil {
+		return s, err
+	}
+	_, err = db.ExecContext(ctx, `INSERT INTO note_shares(note_id,user_id) VALUES(?,?) ON CONFLICT(note_id,user_id) DO NOTHING`, noteID, s.UserID)
+	return s, err
+}
+
+func RevokeNoteShare(ctx context.Context, db *sql.DB, ownerID, noteID, userID int64) error {
+	result, err := db.ExecContext(ctx, `DELETE FROM note_shares WHERE note_id=? AND user_id=? AND EXISTS(SELECT 1 FROM notes WHERE id=? AND user_id=?)`, noteID, userID, noteID, ownerID)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 func UpdateInstagramAttachments(ctx context.Context, db *sql.DB, userID, id int64, attachments []InstagramAttachment) error {
@@ -325,8 +379,8 @@ func ListNotes(ctx context.Context, db *sql.DB, userID int64, query, searchIn, s
 }
 
 func ListNotesFiltered(ctx context.Context, db *sql.DB, userID int64, query, searchIn string, sources, tags []string, sortField, order string, page, pageSize int) (NoteList, error) {
-	where := `user_id = ?`
-	args := []any{userID}
+	where := `(notes.user_id = ? OR EXISTS(SELECT 1 FROM note_shares s WHERE s.note_id=notes.id AND s.user_id=?))`
+	args := []any{userID, userID}
 	if query != "" {
 		term := "%" + escapeLike(query) + "%"
 		switch searchIn {
@@ -357,15 +411,15 @@ func ListNotesFiltered(ctx context.Context, db *sql.DB, userID int64, query, sea
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM notes WHERE `+where, args...).Scan(&total); err != nil {
 		return NoteList{}, err
 	}
-	orderBy := fmt.Sprintf("%s %s, id %s", sortField, order, order)
+	orderBy := fmt.Sprintf("notes.%s %s, notes.id %s", sortField, order, order)
 	if query != "" && sortField == "relevance" {
-		orderBy = `CASE WHEN lower(title) = lower(?) THEN 1 WHEN title LIKE ? ESCAPE '\' THEN 2 WHEN title LIKE ? ESCAPE '\' THEN 3 ELSE 4 END, updated_at DESC, id DESC`
+		orderBy = `CASE WHEN lower(notes.title) = lower(?) THEN 1 WHEN notes.title LIKE ? ESCAPE '\' THEN 2 WHEN notes.title LIKE ? ESCAPE '\' THEN 3 ELSE 4 END, notes.updated_at DESC, notes.id DESC`
 		args = append(args, query, escapeLike(query)+"%", "%"+escapeLike(query)+"%")
 	}
 	args = append(args, pageSize, (page-1)*pageSize)
 	rows, err := db.QueryContext(ctx, fmt.Sprintf(`
-		SELECT id, user_id, social_identity_id, title, content_markdown, source, external_message_id, created_at, updated_at, instagram_attachments_json, facebook_attachments_json
-		FROM notes WHERE %s ORDER BY %s LIMIT ? OFFSET ?`, where, orderBy), args...)
+		SELECT notes.id, notes.user_id, notes.social_identity_id, notes.title, notes.content_markdown, notes.source, notes.external_message_id, notes.created_at, notes.updated_at, notes.instagram_attachments_json, notes.facebook_attachments_json, users.name, notes.user_id=?
+		FROM notes JOIN users ON users.id=notes.user_id WHERE %s ORDER BY %s LIMIT ? OFFSET ?`, where, orderBy), append([]any{userID}, args...)...)
 	if err != nil {
 		return NoteList{}, err
 	}

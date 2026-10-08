@@ -223,6 +223,58 @@ func (api *API) getNote(w http.ResponseWriter, r *http.Request, auth authenticat
 	writeJSON(w, http.StatusOK, note)
 }
 
+func (api *API) shareNote(w http.ResponseWriter, r *http.Request, auth authentication) {
+	id, ok := noteID(w, r)
+	if !ok {
+		return
+	}
+	var input struct {
+		Email string `json:"email"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	input.Email = strings.ToLower(strings.TrimSpace(input.Email))
+	if !validEmail(input.Email) {
+		writeError(w, 400, "invalid_input")
+		return
+	}
+	share, err := store.ShareNote(r.Context(), api.db, auth.ID, id, input.Email)
+	if errors.Is(err, sql.ErrNoRows) {
+		if note, _ := store.NoteByID(r.Context(), api.db, auth.ID, id); !note.CanEdit {
+			writeError(w, 404, "note_not_found")
+		} else {
+			writeError(w, 404, "user_not_found")
+		}
+		return
+	}
+	if err != nil {
+		writeError(w, 500, "internal_error")
+		return
+	}
+	writeJSON(w, http.StatusCreated, share)
+}
+
+func (api *API) revokeNoteShare(w http.ResponseWriter, r *http.Request, auth authentication) {
+	id, ok := noteID(w, r)
+	if !ok {
+		return
+	}
+	userID, err := strconv.ParseInt(r.PathValue("userID"), 10, 64)
+	if err != nil || userID < 1 {
+		writeError(w, 404, "share_not_found")
+		return
+	}
+	if err = store.RevokeNoteShare(r.Context(), api.db, auth.ID, id, userID); errors.Is(err, sql.ErrNoRows) {
+		writeError(w, 404, "share_not_found")
+		return
+	} else if err != nil {
+		writeError(w, 500, "internal_error")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (api *API) updateNote(w http.ResponseWriter, r *http.Request, auth authentication) {
 	id, ok := noteID(w, r)
 	if !ok {

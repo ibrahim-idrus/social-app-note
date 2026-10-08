@@ -2,6 +2,7 @@
 
 ## 2026-10-08
 
+- Added revocable, read-only note sharing with existing SocialNotes users by exact email.
 - Added a public landing page at `/` and moved all account and application screens under `/app`.
 - Added account-scoped recovery of uncaptured Instagram and Facebook messages with durable oldest-first processing and webhook queueing.
 

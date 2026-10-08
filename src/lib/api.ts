@@ -18,7 +18,11 @@ export type Note = {
 	instagram_attachments: InstagramAttachment[];
 	facebook_attachments: FacebookAttachment[];
 	tags: string[];
+	can_edit: boolean;
+	owner_name: string;
+	shares?: NoteShare[];
 };
+export type NoteShare = { user_id: number; name: string; email: string };
 export type NotesPage = { notes: Note[]; total: number; page: number; page_size: number; tags?: string[] };
 export type FacebookMessage = { external_message_id: string; sender_id: string; page_id: string; text: string; status: string; note_id: number | null; received_at: string };
 export type SocialPlatform = { id: string; name: string; available: boolean; search_enabled: boolean; inbox?: { instagram_user_id?: string; username?: string; page_id?: string } };
@@ -65,6 +69,8 @@ const messages: Record<string, string> = {
 	invalid_input: 'Check the information and try again.',
 	invalid_query: 'The requested filters are invalid.',
 	note_not_found: 'This note was not found.',
+	user_not_found: 'No existing SocialNotes account uses that email address.',
+	share_not_found: 'This note share was not found.',
 	identity_not_found: 'This social identity was not found.',
 	internal_error: 'The service could not complete the request.',
 	instagram_search_unavailable: 'Instagram account lookup is not configured.',
@@ -119,6 +125,8 @@ export function createApiClient(fetcher: Fetch = fetch, cookies = () => typeof d
 		tags: async () => (await request<{ tags: string[] }>('/api/tags')).tags,
 		facebookMessages: async () => (await request<{ messages: FacebookMessage[] }>('/api/facebook-messages')).messages,
 		getNote: (id: number) => request<Note>(`/api/notes/${id}`),
+		shareNote: (id: number, email: string) => request<NoteShare>(`/api/notes/${id}/shares`, { method: 'POST', body: JSON.stringify({ email }) }),
+		revokeNoteShare: (id: number, userID: number) => request<void>(`/api/notes/${id}/shares/${userID}`, { method: 'DELETE' }),
 		resolveInstagramMedia: (id: number) => request<{ media: InstagramCachedMedia[]; attachments: InstagramAttachment[] }>(`/api/notes/${id}/instagram-media/resolve`, { method: 'POST' }),
 		instagramMediaURL: (id: number, key: string) => `/api/notes/${id}/instagram-media/${encodeURIComponent(key)}`,
 		createNote: (input: { title: string; content: string }) => request<Note>('/api/notes', { method: 'POST', body: JSON.stringify({ title: input.title, content_markdown: input.content }) }),
