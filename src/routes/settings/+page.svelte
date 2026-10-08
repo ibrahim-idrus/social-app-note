@@ -13,6 +13,8 @@
 	let error = $state('');
 	let loading = $state(true);
 	let registration = $state<SocialRegistration | null>(null);
+	let syncing = $state<Set<number>>(new Set());
+	let syncStatus = $state<Record<number, string>>({});
 
 	let waitingFor = $state<Set<number>>(new Set());
 	let pollTimer: ReturnType<typeof setInterval> | undefined;
@@ -58,6 +60,15 @@
 			syncPolling();
 		}
 		catch (cause) { error = cause instanceof Error ? cause.message : 'Identity could not be removed.'; }
+	}
+	async function syncMessages(identity: SocialIdentity) {
+		syncing = new Set(syncing).add(identity.id);
+		error = '';
+		try {
+			const result = await api.syncSocialMessages(identity.id);
+			syncStatus = { ...syncStatus, [identity.id]: `${result.processed} processed, ${result.duplicates} already captured${result.complete ? '.' : '. Provider history may be incomplete.'}` };
+		} catch (cause) { error = cause instanceof Error ? cause.message : 'Messages could not be synced.'; }
+		finally { syncing = new Set([...syncing].filter((id) => id !== identity.id)); }
 	}
 	function sent(identity: SocialIdentity) {
 		waitingFor = new Set(waitingFor).add(identity.id);
@@ -120,6 +131,8 @@
 							{:else}
 								<div class="notice"><strong>✓ Instagram connected</strong><p>Only messages from verified @{identity.username} become notes.</p></div>
 							{/if}
+							<Button variant="outline" disabled={syncing.has(identity.id)} onclick={() => syncMessages(identity)}>{syncing.has(identity.id) ? 'Syncing…' : 'Sync uncaptured messages'}</Button>
+							{#if syncStatus[identity.id]}<p class="field-help" role="status">{syncStatus[identity.id]}</p>{/if}
 						{:else if identity.verification_state === 'expired'}
 							<div class="notice error" role="status"><strong>Your verification code has expired</strong><p>Regenerate it and send the new code to {identity.platform === 'facebook' ? 'the Facebook Page' : 'Instagram'}.</p></div>
 							<Button variant="outline" onclick={() => regenerate(identity)}>Regenerate code</Button>

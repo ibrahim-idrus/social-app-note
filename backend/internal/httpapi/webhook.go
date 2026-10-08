@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -19,7 +21,8 @@ import (
 )
 
 type instagramWebhookEvent struct {
-	Sender struct {
+	Timestamp int64 `json:"timestamp"`
+	Sender    struct {
 		ID string `json:"id"`
 	} `json:"sender"`
 	Recipient struct {
@@ -288,7 +291,6 @@ func (api *API) instagramWebhook(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	log.Printf("instagram webhook raw body=%s", body)
 	var payload instagramWebhookPayload
 	if err := json.Unmarshal(body, &payload); err != nil {
 		result = "malformed_json"
@@ -333,10 +335,11 @@ func (api *API) instagramWebhook(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			log.Printf("instagram webhook event type=text entry=%s sender=%s recipient=%s message=%s", webhookID(entry.ID), webhookID(event.Sender.ID), webhookID(event.Recipient.ID), webhookID(event.Message.MID))
-			if len(attachments) > 0 {
-				_, err = store.ProcessInstagramMessage(r.Context(), api.db, event.Recipient.ID, event.Sender.ID, event.Message.MID, event.Message.Text, attachments, time.Now().UTC().Format(time.RFC3339Nano))
-			} else {
+			encoded, _ := json.Marshal(attachments)
+			if _, lookupErr := store.ActiveSocialIdentityForMessage(r.Context(), api.db, "instagram", event.Sender.ID); errors.Is(lookupErr, sql.ErrNoRows) && len(attachments) == 0 {
 				err = api.processInstagramText(r.Context(), event.Recipient.ID, event.Sender.ID, event.Message.MID, event.Message.Text)
+			} else {
+				_, _, err = api.queueAndDrain(r.Context(), store.QueuedSocialMessage{Platform: "instagram", ExternalMessageID: event.Message.MID, ProviderSentAt: providerEventTime(event.Timestamp), SenderID: event.Sender.ID, RecipientID: event.Recipient.ID, Text: event.Message.Text, AttachmentsJSON: sql.NullString{String: string(encoded), Valid: len(attachments) > 0}})
 			}
 			if err != nil {
 				failed++

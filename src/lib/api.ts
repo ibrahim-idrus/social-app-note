@@ -129,7 +129,8 @@ export function createApiClient(fetcher: Fetch = fetch, cookies = () => typeof d
 		identities: async () => (await request<{ identities: SocialIdentity[] }>('/api/social-identities')).identities,
 		createSocialIdentity: (platform: string, username = '') => request<SocialRegistration>('/api/social-identities', { method: 'POST', body: JSON.stringify({ platform, username }) }),
 		regenerateSocialIdentityCode: (id: number) => request<SocialRegistration>(`/api/social-identities/${id}/verification-code`, { method: 'POST' }),
-		deleteSocialIdentity: (id: number) => request<void>(`/api/social-identities/${id}`, { method: 'DELETE' })
+		deleteSocialIdentity: (id: number) => request<void>(`/api/social-identities/${id}`, { method: 'DELETE' }),
+		syncSocialMessages: (id: number) => request<{ fetched: number; processed: number; duplicates: number; remaining: number; complete: boolean }>(`/api/social-identities/${id}/sync-messages`, { method: 'POST' })
 	};
 }
 

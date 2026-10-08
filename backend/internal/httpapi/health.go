@@ -76,6 +76,7 @@ func Handler(db *sql.DB, options ...Options) http.Handler {
 	mux.HandleFunc("POST /api/social-identities", api.authenticated(api.createSocialIdentity, true))
 	mux.HandleFunc("POST /api/social-identities/{id}/verification-code", api.authenticated(api.regenerateSocialIdentityCode, true))
 	mux.HandleFunc("DELETE /api/social-identities/{id}", api.authenticated(api.deleteSocialIdentity, true))
+	mux.HandleFunc("POST /api/social-identities/{id}/sync-messages", api.authenticated(api.syncMessages, true))
 	mux.HandleFunc("POST /api/integrations/instagram/simulated-dm", api.simulatedInstagramDM)
 	mux.HandleFunc("GET /api/integrations/instagram/webhook", api.instagramWebhookVerify)
 	mux.HandleFunc("POST /api/integrations/instagram/webhook", api.instagramWebhook)

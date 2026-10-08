@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-08
+
+- Added account-scoped recovery of uncaptured Instagram and Facebook messages with durable oldest-first processing and webhook queueing.
+
 ## 2026-10-07
 
 - Remove the rewritten HTML base tag that caused blank pages on the root-mounted domain.

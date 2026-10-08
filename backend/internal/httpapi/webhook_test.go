@@ -242,10 +242,9 @@ func TestInstagramWebhookRecordsSignedRawBodyBeforeParsing(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	got := logs.String()
-	rawAt := strings.Index(got, "instagram webhook raw body="+body)
 	resultAt := strings.Index(got, "instagram webhook result=malformed_json")
-	if w.Code != http.StatusBadRequest || rawAt < 0 || resultAt < 0 || rawAt > resultAt {
-		t.Fatalf("status=%d raw_at=%d result_at=%d logs=%q", w.Code, rawAt, resultAt, got)
+	if w.Code != http.StatusBadRequest || resultAt < 0 || strings.Contains(got, body) {
+		t.Fatalf("status=%d result_at=%d logs=%q", w.Code, resultAt, got)
 	}
 
 	logs.Reset()

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -19,7 +20,8 @@ import (
 )
 
 type facebookWebhookEvent struct {
-	Sender struct {
+	Timestamp int64 `json:"timestamp"`
+	Sender    struct {
 		ID string `json:"id"`
 	} `json:"sender"`
 	Recipient struct {
@@ -99,23 +101,22 @@ func (api *API) facebookWebhook(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			processingRan = true
-			outcome, err := store.ProcessFacebookMessage(r.Context(), api.db, entry.ID, event.Sender.ID, event.Message.MID, event.Message.Text, event.Message.IsEcho, attachments, time.Now().UTC().Format(time.RFC3339Nano))
+			var existed bool
+			_ = api.db.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM facebook_message_receipts WHERE external_message_id=?)`, event.Message.MID).Scan(&existed)
+			encoded, _ := json.Marshal(attachments)
+			_, pipelineResult, err := api.queueAndDrain(r.Context(), store.QueuedSocialMessage{Platform: "facebook", ExternalMessageID: event.Message.MID, ProviderSentAt: providerEventTime(event.Timestamp), SenderID: event.Sender.ID, RecipientID: entry.ID, Text: event.Message.Text, AttachmentsJSON: sql.NullString{String: string(encoded), Valid: len(attachments) > 0}})
 			if err != nil {
 				log.Printf("facebook webhook event result sender=%s recipient=%s page=%s message=%s processing_ran=true processing_result=error", sender, recipient, page, messageID)
 				requestResult = "processing_failed"
 				writeError(w, http.StatusInternalServerError, "internal_error")
 				return
 			}
-			if outcome.OwnsReply {
-				sent := api.sendFacebookText(r.Context(), event.Sender.ID, "Your Facebook Messenger account is connected to "+api.productName+".") == nil
-				if err := store.RecordFacebookVerificationReply(r.Context(), api.db, event.Message.MID, time.Now().UTC().Format(time.RFC3339Nano), sent); err != nil {
-					requestResult = "processing_failed"
-					writeError(w, http.StatusInternalServerError, "internal_error")
-					return
-				}
+			status := pipelineResult
+			if existed {
+				status = "duplicate"
 			}
-			requestResult = string(outcome.Kind)
-			log.Printf("facebook webhook event result sender=%s recipient=%s page=%s message=%s processing_ran=true processing_result=%s", sender, recipient, page, messageID, outcome.Kind)
+			requestResult = status
+			log.Printf("facebook webhook event result sender=%s recipient=%s page=%s message=%s processing_ran=true processing_result=%s", sender, recipient, page, messageID, status)
 		}
 	}
 	if requestResult == "unknown" {
