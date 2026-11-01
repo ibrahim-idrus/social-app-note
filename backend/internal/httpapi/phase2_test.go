@@ -39,19 +39,19 @@ func TestInstagramPlatformExposesDedicatedInboxWithoutSearch(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	handler := Handler(db, Options{InstagramAccountID: "inbox-id", InstagramUsername: "akun_testing911", InstagramAccessToken: "secret-token"})
+	handler := Handler(db, Options{InstagramAccountID: "inbox-id", InstagramUsername: "socialnotes.app", InstagramAccessToken: "secret-token"})
 	c := newTestClientWithHandler(t, handler)
 	c.db = db
 	c.register(t, "Owner", "owner@example.com")
 
 	res := c.request(t, http.MethodGet, "/api/social-platforms", nil, false)
-	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"search_enabled":false`) || !strings.Contains(res.Body.String(), `"inbox":{"instagram_user_id":"inbox-id","username":"akun_testing911"}`) {
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"search_enabled":false`) || !strings.Contains(res.Body.String(), `"inbox":{"instagram_user_id":"inbox-id","username":"socialnotes.app"}`) {
 		t.Fatalf("platforms = %d %s", res.Code, res.Body.String())
 	}
 	if strings.Contains(res.Body.String(), `"senders"`) {
 		t.Fatalf("obsolete configured senders exposed: %s", res.Body.String())
 	}
-	if got := c.request(t, http.MethodGet, "/api/social-identities/search?username=akun_testing911", nil, false).Code; got != http.StatusMethodNotAllowed {
+	if got := c.request(t, http.MethodGet, "/api/social-identities/search?username=socialnotes.app", nil, false).Code; got != http.StatusMethodNotAllowed {
 		t.Fatalf("search route = %d, want 405", got)
 	}
 }
@@ -62,7 +62,7 @@ func TestInstagramRegistrationAcceptsSenderUsernameButRejectsDedicatedInbox(t *t
 		t.Fatal(err)
 	}
 	defer db.Close()
-	c := newTestClientWithHandler(t, Handler(db, Options{InstagramAccountID: "inbox-id", InstagramUsername: "akun_testing911", InstagramAccessToken: "token"}))
+	c := newTestClientWithHandler(t, Handler(db, Options{InstagramAccountID: "inbox-id", InstagramUsername: "socialnotes.app", InstagramAccessToken: "token"}))
 	c.db = db
 	c.register(t, "Alice", "alice@example.com")
 	if got := c.request(t, http.MethodPost, "/api/social-identities", map[string]string{"platform": "instagram", "username": "sender_account"}, true).Code; got != http.StatusCreated {
@@ -78,10 +78,10 @@ func TestInstagramRegistrationAcceptsSenderUsernameButRejectsDedicatedInbox(t *t
 		t.Fatal(err)
 	}
 	defer db2.Close()
-	c2 := newTestClientWithHandler(t, Handler(db2, Options{InstagramAccountID: "inbox-id", InstagramUsername: "akun_testing911", InstagramAccessToken: "token"}))
+	c2 := newTestClientWithHandler(t, Handler(db2, Options{InstagramAccountID: "inbox-id", InstagramUsername: "socialnotes.app", InstagramAccessToken: "token"}))
 	c2.db = db2
 	c2.register(t, "Bob", "bob@example.com")
-	res := c2.request(t, http.MethodPost, "/api/social-identities", map[string]string{"platform": "instagram", "username": "akun_testing911"}, true)
+	res := c2.request(t, http.MethodPost, "/api/social-identities", map[string]string{"platform": "instagram", "username": "socialnotes.app"}, true)
 	if res.Code != http.StatusConflict || !strings.Contains(res.Body.String(), "dedicated_instagram_account") {
 		t.Fatalf("inbox create = %d %s", res.Code, res.Body.String())
 	}

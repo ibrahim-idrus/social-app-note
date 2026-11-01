@@ -69,7 +69,7 @@ func webhookHandler(t *testing.T, verifyToken, appSecret string) (http.Handler, 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	h := Handler(db, Options{InstagramAccountID: "inbox", InstagramUsername: "akun_testing911", InstagramAccessToken: "token", InstagramWebhookVerifyToken: verifyToken, InstagramAppSecret: appSecret, HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+	h := Handler(db, Options{InstagramAccountID: "inbox", InstagramUsername: "socialnotes.app", InstagramAccessToken: "token", InstagramWebhookVerifyToken: verifyToken, InstagramAppSecret: appSecret, HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{}`)), Header: make(http.Header)}, nil
 	})}})
 	return h, &testClient{handler: h, db: db}
@@ -142,7 +142,7 @@ func TestInstagramWebhookIgnoresUnmatchedSender(t *testing.T) {
 	if _, err := c.db.Exec(`UPDATE instagram_integrations SET owner_user_id=(SELECT id FROM users WHERE email='owner@example.com') WHERE instagram_user_id='inbox'`); err != nil {
 		t.Fatal(err)
 	}
-	c.handler = Handler(c.db, Options{InstagramAccountID: "inbox", InstagramUsername: "akun_testing911", InstagramAccessToken: "token", InstagramWebhookVerifyToken: "verify", InstagramAppSecret: "app-secret", HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+	c.handler = Handler(c.db, Options{InstagramAccountID: "inbox", InstagramUsername: "socialnotes.app", InstagramAccessToken: "token", InstagramWebhookVerifyToken: "verify", InstagramAppSecret: "app-secret", HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{}`)), Header: make(http.Header)}, nil
 	})}})
 	payload := `{"object":"instagram","entry":[{"id":"inbox","messaging":[{"sender":{"id":"sender-1"},"recipient":{"id":"inbox"},"message":{"mid":"mid-unmatched","text":"instagram e2e"}}]}]}`
@@ -292,7 +292,7 @@ func TestInstagramWebhookDoesNotTrustConfiguredUser2WithoutVerification(t *testi
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	h := Handler(db, Options{InstagramAccountID: "17841426326903892", InstagramUsername: "akun_testing911", InstagramAccessToken: "token", InstagramUser2AccountID: "17841421563711996", InstagramWebhookVerifyToken: "verify", InstagramAppSecret: "app-secret", HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+	h := Handler(db, Options{InstagramAccountID: "17841426326903892", InstagramUsername: "socialnotes.app", InstagramAccessToken: "token", InstagramUser2AccountID: "17841421563711996", InstagramWebhookVerifyToken: "verify", InstagramAppSecret: "app-secret", HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{}`)), Header: make(http.Header)}, nil
 	})}})
 	c := &testClient{handler: h, db: db}
@@ -396,7 +396,7 @@ func TestInstagramWebhookProcessingSurvivesMessageLookupFailure(t *testing.T) {
 		}
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{}`)), Header: make(http.Header)}, nil
 	})}
-	h := Handler(db, Options{InstagramAccountID: "inbox", InstagramUsername: "akun_testing911", InstagramAccessToken: "instagram-user-token", InstagramWebhookVerifyToken: "verify", InstagramAppSecret: "app-secret", HTTPClient: client})
+	h := Handler(db, Options{InstagramAccountID: "inbox", InstagramUsername: "socialnotes.app", InstagramAccessToken: "instagram-user-token", InstagramWebhookVerifyToken: "verify", InstagramAppSecret: "app-secret", HTTPClient: client})
 	c := &testClient{handler: h, db: db}
 	c.register(t, "Alice", "alice@example.com")
 	registration := registerInstagram(t, c, "alice")

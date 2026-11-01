@@ -123,7 +123,7 @@ func TestInstagramRegistrationRequiresManualDMFromUsersOwnAccount(t *testing.T) 
 	}
 	t.Cleanup(func() { db.Close() })
 	c := newTestClientWithHandler(t, Handler(db, Options{
-		InstagramAccountID: "inbox-id", InstagramUsername: "akun_testing911", InstagramAccessToken: "inbox-token",
+		InstagramAccountID: "inbox-id", InstagramUsername: "socialnotes.app", InstagramAccessToken: "inbox-token",
 		HTTPClient: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			requests++
 			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{}`)), Header: make(http.Header)}, nil
@@ -135,7 +135,7 @@ func TestInstagramRegistrationRequiresManualDMFromUsersOwnAccount(t *testing.T) 
 	if requests != 0 {
 		t.Fatalf("registration made %d outbound Instagram requests", requests)
 	}
-	if registration.VerificationCode == "" || registration.InstagramAccount.Username != "akun_testing911" {
+	if registration.VerificationCode == "" || registration.InstagramAccount.Username != "socialnotes.app" {
 		t.Fatalf("manual verification instructions = %#v", registration)
 	}
 }
