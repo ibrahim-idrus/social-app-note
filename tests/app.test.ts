@@ -7,7 +7,8 @@ import { renderMarkdown, slugHeading } from '../src/lib/app-utils.ts';
 test('the root is a landing page and application routes live under /app', async () => {
 	const { readFile, glob } = await import('node:fs/promises');
 	const landing = await readFile('src/routes/+page.svelte', 'utf8');
-	assert.match(landing, /Your social feed, turned into a useful notebook/);
+	assert.match(landing, /DM a post\./);
+	assert.match(landing, /Find it later\./);
 	assert.match(landing, /resolve\('\/app\/register'\)/);
 	const sources = (await Array.fromAsync(glob('src/**/*.svelte'), (file) => readFile(file, 'utf8'))).join('\n');
 	assert.doesNotMatch(sources, /resolve\('\/(?:dashboard|login|register|notes|settings)/);

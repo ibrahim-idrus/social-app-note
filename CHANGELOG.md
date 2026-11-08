@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-08
+
+- Refocus the homepage on sending Instagram and Facebook posts into private, searchable notes, with a three-step explanation and product demo placeholder.
+
 ## 2026-10-08
 
 - Rename the dedicated Instagram account from `akun_testing911` to `socialnotes.app`.
