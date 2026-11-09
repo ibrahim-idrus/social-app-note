@@ -1,6 +1,9 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
+	import { base } from '$app/paths';
+	import { homepageLinks } from '$lib/homepage-links';
 	import { ArrowRight, BookOpenText, MessageCircle, Search, Send, ShieldCheck, Video } from '@lucide/svelte';
+
+	const links = homepageLinks(base);
 </script>
 
 <svelte:head>
@@ -9,13 +12,13 @@
 </svelte:head>
 
 <div class="landing">
-	<header><a class="brand" href={resolve('/')}><span class="brand-mark"><BookOpenText size={18} /></span>SocialNotes</a><nav aria-label="Account"><a href={resolve('/app/login')}>Sign in</a><a class="primary" href={resolve('/app/register')}>Get started</a></nav></header>
+	<header><a class="brand" href={links.home}><span class="brand-mark"><BookOpenText size={18} /></span>SocialNotes</a><nav aria-label="Account"><a href={links.login}>Sign in</a><a class="primary" href={links.register}>Get started</a></nav></header>
 	<main>
 		<section class="hero">
 			<span class="eyebrow">Instagram and Facebook posts, made findable</span>
 			<h1>DM a post.<br />Find it later.</h1>
 			<p>Send useful content from Instagram or Facebook Messenger to SocialNotes. It becomes a private, searchable note you can revisit when you actually need it.</p>
-			<div class="actions"><a class="primary" href={resolve('/app/register')}>Start saving posts <ArrowRight size={17} /></a><a href="#how-it-works">See how it works</a></div>
+			<div class="actions"><a class="primary" href={links.register}>Start saving posts <ArrowRight size={17} /></a><a href={links.howItWorks}>See how it works</a></div>
 		</section>
 
 		<section class="flow" id="how-it-works" aria-labelledby="flow-title">
@@ -39,7 +42,7 @@
 
 		<section class="trust" aria-labelledby="trust-title"><span class="trust-icon"><ShieldCheck /></span><div><span class="eyebrow">Private by default</span><h2 id="trust-title">Only verified social accounts create notes.</h2><p>Your notes stay in your private workspace. Social capture is optional, and connections are managed from your settings.</p></div></section>
 
-		<section class="final-cta"><h2>Keep the post. Lose the scroll.</h2><p>Build a searchable home for the useful things you find.</p><a class="primary" href={resolve('/app/register')}>Get started <ArrowRight size={17} /></a></section>
+		<section class="final-cta"><h2>Keep the post. Lose the scroll.</h2><p>Build a searchable home for the useful things you find.</p><a class="primary" href={links.register}>Get started <ArrowRight size={17} /></a></section>
 	</main>
 </div>
 

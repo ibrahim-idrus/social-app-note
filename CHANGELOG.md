@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-09
+- Fixed every homepage link and CTA to retain SvelteKit's configured deployment base, including the `/projects/socialnotes/` compatibility path.
+- Added regression coverage for the complete homepage href set under root and compatibility deployments.
+
 ## 2026-11-08
 
 - Refocus the homepage on sending Instagram and Facebook posts into private, searchable notes, with a three-step explanation and product demo placeholder.

@@ -3,15 +3,30 @@ import test from 'node:test';
 
 import { ApiError, createApiClient } from '../src/lib/api.ts';
 import { renderMarkdown, slugHeading } from '../src/lib/app-utils.ts';
+import { homepageLinks } from '../src/lib/homepage-links.ts';
 
 test('the root is a landing page and application routes live under /app', async () => {
 	const { readFile, glob } = await import('node:fs/promises');
 	const landing = await readFile('src/routes/+page.svelte', 'utf8');
 	assert.match(landing, /DM a post\./);
 	assert.match(landing, /Find it later\./);
-	assert.match(landing, /resolve\('\/app\/register'\)/);
+	assert.match(landing, /homepageLinks\(base\)/);
+	assert.doesNotMatch(landing, /href=\{resolve\(/);
 	const sources = (await Array.fromAsync(glob('src/**/*.svelte'), (file) => readFile(file, 'utf8'))).join('\n');
 	assert.doesNotMatch(sources, /resolve\('\/(?:dashboard|login|register|notes|settings)/);
+});
+
+test('every homepage link preserves the configured deployment base', async () => {
+	assert.deepEqual(homepageLinks(''), {
+		home: '/', login: '/app/login', register: '/app/register', howItWorks: '#how-it-works'
+	});
+	assert.deepEqual(homepageLinks('/projects/socialnotes'), {
+		home: '/projects/socialnotes/', login: '/projects/socialnotes/app/login', register: '/projects/socialnotes/app/register', howItWorks: '#how-it-works'
+	});
+
+	const source = await (await import('node:fs/promises')).readFile('src/routes/+page.svelte', 'utf8');
+	const hrefs = [...source.matchAll(/href=\{links\.(\w+)\}/g)].map((match) => match[1]);
+	assert.deepEqual(hrefs, ['home', 'login', 'register', 'register', 'howItWorks', 'register']);
 });
 
 test('notes search, repeated source/tag filters, sorting, and pagination are sent to the backend', async () => {
