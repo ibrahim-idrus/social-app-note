@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-25
+- Fixed the root-mounted login and registration routes rendering blank because the deployed SvelteKit bundle was built for the legacy `/projects/socialnotes` base path.
+
 ## 2026-11-09
 - Fixed every homepage link and CTA to retain SvelteKit's configured deployment base, including the `/projects/socialnotes/` compatibility path.
 - Added regression coverage for the complete homepage href set under root and compatibility deployments.
